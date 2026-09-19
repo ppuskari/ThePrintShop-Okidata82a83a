@@ -30,7 +30,7 @@ Invoke-Checked {
 } "Historical source patch check"
 
 Write-Host ""
-Write-Host "Generating patched source and DOS 3.3 source disks in '$OutputDir'..."
+Write-Host "Generating patched decoded source in '$OutputDir'..."
 Invoke-Checked {
     py -3 tools\patch_printshop_source.py --output-dir $OutputDir --output-disks $OutputDir
 } "Patched source generation"
@@ -39,6 +39,3 @@ Write-Host ""
 Write-Host "PASS"
 Write-Host "  $OutputDir\PRCOMS.OKI.S"
 Write-Host "  $OutputDir\MENUS7.OKI.S"
-Write-Host "  $OutputDir\PrintShop-V2-OkiGraph-source-1.dsk"
-Write-Host "  $OutputDir\PrintShop-V2-OkiGraph-source-2.dsk"
-Write-Host "  $OutputDir\PrintShop-V2-OkiGraph-source-3.dsk"
