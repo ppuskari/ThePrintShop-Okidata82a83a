@@ -1,0 +1,22 @@
+name: Discover original Print Shop build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/analyze_original_build.py"
+      - ".github/workflows/build-discovery.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Report original build structure
+        run: python tools/analyze_original_build.py
