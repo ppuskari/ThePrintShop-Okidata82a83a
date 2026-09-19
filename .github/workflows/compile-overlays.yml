@@ -53,15 +53,23 @@ jobs:
               Path(out).write_text("\n".join(lines) + "\n", encoding="ascii")
           PY
 
-      - name: Assemble patched overlays
+      - name: Assemble PRCOMS control
         run: |
           cd build
           ./merlin32-bin PRCOMS.BUILD.S
-          ./merlin32-bin MENUS7.BUILD.S
-          echo "=== BUILD DIRECTORY ==="
+          echo "=== AFTER PRCOMS ==="
           ls -l
-          echo "=== SHA256 ==="
-          sha256sum PRCOMS MENUS7 || true
+          sha256sum PRCOMS || true
+
+      - name: Diagnose and assemble MENUS7
+        run: |
+          cd build
+          echo "=== MENUS7 LINES 62-78 ==="
+          nl -ba MENUS7.BUILD.S | sed -n '62,78p'
+          ./merlin32-bin MENUS7.BUILD.S
+          echo "=== AFTER MENUS7 ==="
+          ls -l
+          sha256sum MENUS7 || true
 
       - name: Inspect Print Shop v2.035 production image
         run: |
