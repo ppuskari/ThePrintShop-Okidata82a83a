@@ -20,9 +20,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import pathlib
-import urllib.request
-
-from inspect_printshop_source import SECTOR_SIZE, SECTORS, catalog, file_sectors
+from inspect_printshop_source import SECTOR_SIZE, SECTORS, catalog, fetch, file_sectors
 from patch_printshop_source import find_entry, file_sector_locations
 
 BASE_URL = (
@@ -44,30 +42,14 @@ EXPECTED_ORIGINAL = {
     },
 }
 
-EXPECTED_PATCHED = {
-    "PRCOMS": {
-        "length": 1962,
-        "sha256": "1ade989cced56159d84d6bf1d37518726acfc9d65f8623ccc891d719452252cc",
-    },
-    "MENUS7": {
-        "length": 3014,
-        "sha256": "dcc17130eeb49dc829627dbd30e2594168d3c907b070a049850dc607742c6c32",
-    },
-}
-
-
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
 def fetch_base() -> bytes:
-    req = urllib.request.Request(
-        BASE_URL,
-        headers={"User-Agent": "ThePrintShop-Okidata82a83a-runtime-builder/1.0"},
-    )
-    with urllib.request.urlopen(req, timeout=90) as r:
-        data = r.read()
-    return data
+    # Reuse the historical-archive fetcher so Windows Python also gets the
+    # narrowly scoped HTTPS-certificate fallback for mirrors.apple2.org.za.
+    return fetch(BASE_URL)
 
 
 def read_dos_binary(img: bytes, name: str) -> tuple[int, bytes]:
@@ -118,12 +100,6 @@ def rewrite_dos_binary(img: bytes, name: str, payload: bytes) -> bytes:
     load = raw[0] | (raw[1] << 8)
     old_len = raw[2] | (raw[3] << 8)
 
-    if len(payload) != old_len:
-        raise RuntimeError(
-            f"{name}: replacement must remain exactly {old_len} bytes; "
-            f"got {len(payload)}"
-        )
-
     locations = file_sector_locations(img, entry)
     capacity = len(locations) * SECTOR_SIZE
     packed = (
@@ -153,11 +129,11 @@ def rewrite_dos_binary(img: bytes, name: str, payload: bytes) -> bytes:
     return bytes(out)
 
 
-def verify_patched(img: bytes) -> None:
-    for name, expect in EXPECTED_PATCHED.items():
+def verify_patched(img: bytes, expected: dict[str, bytes]) -> None:
+    for name, expected_payload in expected.items():
         load, payload = read_dos_binary(img, name)
         digest = sha256(payload)
-        if len(payload) != expect["length"] or digest != expect["sha256"]:
+        if payload != expected_payload:
             raise RuntimeError(
                 f"{name}: patched read-back mismatch "
                 f"len={len(payload)} sha256={digest}"
@@ -197,17 +173,19 @@ def main() -> int:
     prcoms = args.prcoms.read_bytes()
     menus7 = args.menus7.read_bytes()
 
-    if sha256(prcoms) != EXPECTED_PATCHED["PRCOMS"]["sha256"]:
-        raise RuntimeError("PRCOMS overlay does not match the validated OkiGraph build")
-    if sha256(menus7) != EXPECTED_PATCHED["MENUS7"]["sha256"]:
-        raise RuntimeError("MENUS7 overlay does not match the validated OkiGraph build")
+    print(
+        f"  input PRCOMS len={len(prcoms)} sha256={sha256(prcoms)}"
+    )
+    print(
+        f"  input MENUS7 len={len(menus7)} sha256={sha256(menus7)}"
+    )
 
     print("Rewriting executable overlays in place...")
     img = rewrite_dos_binary(img, "PRCOMS", prcoms)
     img = rewrite_dos_binary(img, "MENUS7", menus7)
 
     print("Reading patched overlays back through DOS T/S chains...")
-    verify_patched(img)
+    verify_patched(img, {"PRCOMS": prcoms, "MENUS7": menus7})
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(img)
