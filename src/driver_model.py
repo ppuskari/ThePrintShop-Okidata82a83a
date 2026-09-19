@@ -37,21 +37,26 @@ def graphics_record(source: bytes) -> bytes:
 
 
 def text_crlf(count: int) -> bytes:
-    """R2 type-5 text CR/LF: no legacy ESC % 9 spacing sequence."""
+    """R3 type-5 text CR/LF: no legacy ESC % 9 spacing sequence."""
     if count < 0:
         raise ValueError("count must be non-negative")
     return bytes([0x0D]) + bytes([0x0A]) * count
 
 
 def graphics_crlf(count: int) -> bytes:
-    """R2 vertical move after a completed OkiGraph graphics transaction.
+    """R3 vertical move after a completed Print Shop graphics transaction.
 
-    Print Shop exits graphics at the end of each chunk.  Each requested
-    vertical move therefore enters OkiGraph command state, performs the
-    native graphics LF+CR, then explicitly exits so the next SGC5 $03 starts
-    from the state expected by the original Print Shop transaction model.
+    GC5 has already emitted ETX,EXIT_GRAPHICS.  A zero-count CRLF must still
+    return the carriage.  For one or more vertical moves, enter graphics,
+    issue native ETX,GRAPHICS_LF_CR commands while in graphics state, then
+    exit graphics once at the end.
     """
     if count < 0:
         raise ValueError("count must be non-negative")
-    one = bytes([ETX, GRAPHICS_LF_CR, ETX, EXIT_GRAPHICS])
-    return one * count
+    if count == 0:
+        return bytes([0x0D])
+    return (
+        bytes([ETX])
+        + bytes([ETX, GRAPHICS_LF_CR]) * count
+        + bytes([ETX, EXIT_GRAPHICS])
+    )
