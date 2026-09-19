@@ -31,8 +31,7 @@ SECTOR_SIZE = 256
 IMAGE_SIZE = TRACKS * SECTORS * SECTOR_SIZE
 
 TERMS = re.compile(
-    r"(printer|print[.]|imagewriter|epson|driver|graphics|raster|"
-    r"bit.?image|parallel|serial|interface|pr#)",
+    r"(printer|print[.]|imagewriter|epson|okidata|okig|microline|driver|graphics|raster|"\n    r"bit.?image|parallel|serial|interface|pr#|sendgc|gcout|sendrow|lfcr|line.feed)",
     re.IGNORECASE,
 )
 
@@ -106,7 +105,7 @@ def textish(data: bytes) -> str:
     return raw.decode("ascii", "replace").replace("\r", "\n")
 
 
-def useful_lines(text: str, context: int = 2, max_hits: int = 20):
+def useful_lines(text: str, context: int = 6, max_hits: int = 60):
     lines = text.splitlines()
     hits = []
     used = set()
