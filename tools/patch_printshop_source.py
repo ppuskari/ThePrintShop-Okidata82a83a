@@ -149,7 +149,7 @@ GC5_END_OLD = re.compile(
     r"^GC5X PLA$"
 )
 
-GC5_END_NEW = """LDA #03
+GC5_END_NEW = """ LDA #03
  JSR COUT1
  LDA #02
  JSR COUT1
