@@ -5,9 +5,11 @@ on:
   push:
     paths:
       - "src/driver_model.py"
+      - "src/OKI8283.S"
       - "tests/test_driver_model.py"
       - "tools/inspect_printshop_source.py"
       - "tools/patch_printshop_source.py"
+      - "scripts/Build-DriverSource.ps1"
       - ".github/workflows/driver-check.yml"
 
 permissions:
@@ -23,5 +25,5 @@ jobs:
           python-version: "3.12"
       - name: Run wire-level regression tests
         run: python -m unittest discover -s tests -v
-      - name: Validate patch against historical Print Shop v2 source
-        run: python tools/patch_printshop_source.py --check
+      - name: Validate patch and DOS 3.3 source-disk rewrite
+        run: python tools/patch_printshop_source.py --check --output-disks build
