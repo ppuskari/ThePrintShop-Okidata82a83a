@@ -104,11 +104,50 @@ jobs:
           chmod +x build/ac
           echo "=== PRODUCTION IMAGE DIRECTORY ==="
           build/ac -ll build/PrintShop-v2.035.2mg
-          echo "=== 5.25 RUNTIME ARCHIVE CONTENTS ==="
-          curl -fL --retry 3 \
-            "https://mirrors.apple2.org.za/ftp.apple.asimov.net/images/productivity/graphics/printshop/Print_Shop.zip" \
-            -o build/Print_Shop.zip
-          unzip -l build/Print_Shop.zip
+          BASE="https://mirrors.apple2.org.za/ftp.apple.asimov.net/images/productivity/graphics/printshop"
+
+          curl -fL --retry 3 "$BASE/PrintShop.dsk" -o build/PrintShop.dsk
+          curl -fL --retry 3 "$BASE/ColorPrintShop.DSK" -o build/ColorPrintShop.DSK
+          curl -fL --retry 3 "$BASE/The%20Print%20Shop%20%28Mr.%20Krac-Man%20crack%29%20-%20Side%201.dsk" -o build/Krac1.dsk
+          curl -fL --retry 3 "$BASE/The%20Print%20Shop%20%28Mr.%20Krac-Man%20crack%29%20-%20Side%202.dsk" -o build/Krac2.dsk
+          curl -fL --retry 3 "$BASE/The_Print_Shop_IIc_Plus.zip" -o build/IIcPlus.zip
+          curl -fL --retry 3 "$BASE/The%20Print%20Shop%20%28woz-a-day%20collection%29.zip" -o build/WozADay.zip
+
+          mkdir -p build/iicplus build/wozaday
+          unzip -oq build/IIcPlus.zip -d build/iicplus
+          unzip -oq build/WozADay.zip -d build/wozaday
+
+          scan_image() {
+            img="$1"
+            tag=$(echo "$img" | tr '/ ' '__' | tr -cd 'A-Za-z0-9_.-')
+            echo
+            echo "=== CANDIDATE: $img ==="
+            build/ac -ll "$img" || true
+            for mod in PRCOMS MENUS7; do
+              out="build/runtime-$tag-$mod"
+              rm -f "$out"
+              if build/ac -g "$img" "$mod" "$out" 2>/dev/null; then
+                echo "--- FOUND $mod in $img ---"
+                ls -l "$out"
+                sha256sum "$out"
+                if [ "$mod" = "PRCOMS" ]; then
+                  cmp -l build/PRCOMS.ORIG "$out" | head -20 || true
+                else
+                  cmp -l build/MENUS7.ORIG "$out" | head -20 || true
+                fi
+              fi
+            done
+          }
+
+          scan_image build/PrintShop.dsk
+          scan_image build/ColorPrintShop.DSK
+          scan_image build/Krac1.dsk
+          scan_image build/Krac2.dsk
+
+          while IFS= read -r img; do
+            scan_image "$img"
+          done < <(find build/iicplus build/wozaday -type f \
+            \( -iname '*.dsk' -o -iname '*.do' -o -iname '*.po' -o -iname '*.2mg' -o -iname '*.woz' \) -print)
 
       - name: Upload compiled overlay diagnostics
         if: always()
