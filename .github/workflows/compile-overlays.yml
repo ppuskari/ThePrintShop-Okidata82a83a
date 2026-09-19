@@ -1,0 +1,92 @@
+name: Compile Print Shop OkiGraph overlays
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/compile-overlays.yml"
+      - "tools/patch_printshop_source.py"
+      - "src/OKI8283.S"
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate patched decoded source
+        run: |
+          mkdir -p build
+          python tools/patch_printshop_source.py --output-dir build --check
+
+      - name: Build Merlin32
+        run: |
+          git clone --depth 1 https://github.com/digarok/merlin32.git build/merlin32
+          make -C build/merlin32/Source
+          cp build/merlin32/Source/merlin32 build/merlin32-bin
+          chmod +x build/merlin32-bin
+
+      - name: Prepare SAV-enabled assembly sources
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for src, out, name in [
+              ("build/PRCOMS.OKI.S", "build/PRCOMS.BUILD.S", "PRCOMS"),
+              ("build/MENUS7.OKI.S", "build/MENUS7.BUILD.S", "MENUS7"),
+          ]:
+              text = Path(src).read_text(encoding="ascii")
+              lines = text.splitlines()
+              idx = None
+              for i in range(len(lines)-1, -1, -1):
+                  if lines[i].strip().upper() == "END":
+                      idx = i
+                      break
+              if idx is None:
+                  raise SystemExit(f"{src}: no final END")
+              lines.insert(idx, f" SAV {name}")
+              Path(out).write_text("\n".join(lines) + "\n", encoding="ascii")
+          PY
+
+      - name: Assemble patched overlays
+        run: |
+          cd build
+          ./merlin32-bin PRCOMS.BUILD.S
+          ./merlin32-bin MENUS7.BUILD.S
+          echo "=== BUILD DIRECTORY ==="
+          ls -l
+          echo "=== SHA256 ==="
+          sha256sum PRCOMS MENUS7 || true
+
+      - name: Inspect Print Shop v2.035 production image
+        run: |
+          curl -fL --retry 3 \
+            "https://mirrors.apple2.org.za/ftp.apple.asimov.net/images/productivity/graphics/printshop/The%20Print%20Shop%20v2.035.2mg" \
+            -o build/PrintShop-v2.035.2mg
+          curl -fL --retry 3 \
+            "https://github.com/AppleCommander/AppleCommander/releases/download/14.1/ac-linux-amd64-14.1" \
+            -o build/ac
+          chmod +x build/ac
+          echo "=== PRODUCTION IMAGE DIRECTORY ==="
+          build/ac -ll build/PrintShop-v2.035.2mg
+          echo "=== TRY EXTRACT PRCOMS/MENUS7 ==="
+          build/ac -g build/PrintShop-v2.035.2mg PRCOMS build/PRCOMS.RUNTIME || true
+          build/ac -g build/PrintShop-v2.035.2mg MENUS7 build/MENUS7.RUNTIME || true
+          ls -l build/PRCOMS.RUNTIME build/MENUS7.RUNTIME 2>/dev/null || true
+          sha256sum build/PRCOMS.RUNTIME build/MENUS7.RUNTIME 2>/dev/null || true
+
+      - name: Upload compiled overlay diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: printshop-okigraph-compile-pass
+          path: |
+            build/PRCOMS
+            build/MENUS7
+            build/PRCOMS.RUNTIME
+            build/MENUS7.RUNTIME
+          if-no-files-found: warn
