@@ -51,11 +51,15 @@ From the repository root:
 ```
 
 That performs the wire-model unit tests, checks the patch against the actual
-1987 Print Shop v2 source snapshot, and produces:
+1987 Print Shop v2 source snapshot, and produces decoded patched source plus
+a complete three-disk local source set:
 
 ```
 build\PRCOMS.OKI.S
 build\MENUS7.OKI.S
+build\PrintShop-V2-OkiGraph-source-1.dsk
+build\PrintShop-V2-OkiGraph-source-2.dsk
+build\PrintShop-V2-OkiGraph-source-3.dsk
 ```
 
 Equivalent individual commands:
@@ -63,11 +67,12 @@ Equivalent individual commands:
 ```powershell
 py -3 -m unittest discover -s tests -v
 py -3 tools\patch_printshop_source.py --check
-py -3 tools\patch_printshop_source.py --output-dir build
+py -3 tools\patch_printshop_source.py --output-dir build --output-disks build
 ```
 
-The historical Brøderbund source is downloaded for the transformation but is
-**not committed to this repository**.
+Source disks 1 and 2 contain the rewritten files; source disk 3 is copied
+unchanged so the build directory contains a complete set. The historical
+Brøderbund source and generated disk images are **not committed to this repository**.
 
 ## Validation status
 
@@ -79,7 +84,8 @@ GitHub Actions currently verifies:
 - the legacy raw-`$03` collision becomes `$83`;
 - OkiGraph transaction framing;
 - existing type-5 line-spacing encoding; and
-- exact applicability of the source patch to the 1987-01-26 source disks.
+- exact applicability of the source patch to the 1987-01-26 source disks; and
+- DOS 3.3 source-disk rewrite/read-back through the original T/S chains.
 
 ## Repository map
 
