@@ -45,17 +45,22 @@ class DriverModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             encode_columns(b"\x01")
 
-    def test_r2_text_crlf_has_no_legacy_escape_spacing(self):
+    def test_r3_text_crlf_has_no_legacy_escape_spacing(self):
         self.assertEqual(text_crlf(0), b"\x0d")
         self.assertEqual(text_crlf(2), b"\x0d\x0a\x0a")
         self.assertNotIn(0x1B, text_crlf(2))
 
-    def test_r2_graphics_crlf_native_feed_and_exit(self):
-        self.assertEqual(graphics_crlf(0), b"")
-        self.assertEqual(graphics_crlf(1), b"\x03\x0e\x03\x02")
+    def test_r3_graphics_zero_count_still_returns_carriage(self):
+        self.assertEqual(graphics_crlf(0), b"\x0d")
+
+    def test_r3_graphics_feed_enters_then_commands_then_exits(self):
+        self.assertEqual(
+            graphics_crlf(1),
+            b"\x03\x03\x0e\x03\x02",
+        )
         self.assertEqual(
             graphics_crlf(2),
-            b"\x03\x0e\x03\x02\x03\x0e\x03\x02",
+            b"\x03\x03\x0e\x03\x0e\x03\x02",
         )
 
 
