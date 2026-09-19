@@ -142,7 +142,7 @@ CRLFX TXA
 SETLFX RTS"""
 
 GC5_END_OLD = re.compile(
-    r"(?m)^LDA #03\n"
+    r"(?m)^[ \t]+LDA #03\n"
     r"[ \t]+JSR COUT1\n"
     r"[ \t]+LDA #02\n"
     r"[ \t]+JSR COUT1\n"
