@@ -30,17 +30,16 @@ wire = $80 | reverse7(source0 | source1)
 Forcing bit 7 high preserves the seven dot bits while preventing graphics
 data from ever colliding with OkiGraph's ETX (`$03`) command prefix.
 
-## Low-risk first build
+## Driver evolution
 
-The initial patch is intentionally layout-preserving:
+The initial v0.1 patch was deliberately layout-preserving and proved the
+graphics-data path on real hardware.  R3 keeps the fixed `PRCOMS` jump table
+at `$1800`, leaves Print Shop's printer-interface-card code untouched, and
+retains the proven high-bit-safe raster conversion.  The type-5 CR/LF control
+path is now OkiGraph-specific because hardware testing disproved reuse of the
+legacy ML92/93 spacing sequence.
 
-- the new printer-menu label is the same 23 characters as the original;
-- the modified `GC5` machine-code region remains exactly 20 bytes;
-- the fixed `PRCOMS` jump table at `$1800` is unchanged;
-- Print Shop's printer-interface-card code is untouched; and
-- the existing type-5 line-spacing path is retained for hardware validation.
-
-The assembly core is in [`src/OKI8283.S`](src/OKI8283.S).
+The assembly/control notes are in [`src/OKI8283.S`](src/OKI8283.S).
 
 ## Runnable disk build
 
@@ -140,7 +139,7 @@ GitHub Actions currently verifies:
 - bit 7 set on every graphics-data byte;
 - the legacy raw-`$03` collision becomes `$83`;
 - OkiGraph transaction framing;
-- existing type-5 line-spacing encoding; and
+- R3 text and graphics CR/LF framing, including the mandatory Y=0 carriage return; and
 - exact applicability of the source patch to the 1987-01-26 source disks;
 - DOS source-disk rewrite/read-back through the original T/S chains;
 - untouched Merlin32 control overlays against the shipped runtime;
@@ -180,6 +179,6 @@ Validate the R3 disk on the physical 82A/83A. The specific targets are removal
 of the stray control/text output at graphics transitions, elimination of the
 extra vertical gap between seven-dot bands, and restoration of one-page layout.
 
-The first gate is the retained `ESC % 9 n` line-spacing command. If that
-works as expected, the next source build can preserve the original 92/93
-driver as type 5 and add **82A/83A OkiGraph I as a distinct printer type 10**.
+If R3 validates the corrected carriage-return and native graphics-feed path,
+the next source build can preserve the original 92/93 driver as type 5 and add
+**82A/83A OkiGraph I as a distinct printer type 10**.
