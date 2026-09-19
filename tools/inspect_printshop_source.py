@@ -32,7 +32,8 @@ IMAGE_SIZE = TRACKS * SECTORS * SECTOR_SIZE
 
 TERMS = re.compile(
     r"(printer|print[.]|imagewriter|epson|okidata|okig|microline|driver|graphics|raster|"
-    r"bit.?image|parallel|serial|interface|pr#|sendgc|gcout|sendrow|lfcr|line.feed|"\n    r"prparams|crlf|sgc[0-9a-z]*|gc[0-9][a-z]*|okidata|okig)",
+    r"bit.?image|parallel|serial|interface|pr#|sendgc|gcout|sendrow|lfcr|line.feed|"
+    r"prparams|crlf|sgc[0-9a-z]*|gc[0-9][a-z]*)",
     re.IGNORECASE,
 )
 
