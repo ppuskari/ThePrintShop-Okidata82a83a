@@ -1,0 +1,31 @@
+name: Scan historical Print Shop v2 source
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/inspect_printshop_source.py"
+      - ".github/workflows/source-scan.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  source-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Scan source disks
+        run: |
+          mkdir -p build
+          python tools/inspect_printshop_source.py \
+            --report build/source-scan.txt
+      - name: Upload scan report
+        uses: actions/upload-artifact@v4
+        with:
+          name: printshop-v2-source-scan
+          path: build/source-scan.txt
+          if-no-files-found: error
