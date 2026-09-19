@@ -12,6 +12,8 @@ import argparse
 import pathlib
 import re
 import sys
+import ssl
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -132,11 +134,32 @@ def useful_lines(text: str, context: int = 8, max_hits: int = 100):
 
 
 def fetch(url: str) -> bytes:
-    req = urllib.request.Request(
-        url, headers={"User-Agent": "ThePrintShop-Okidata82a83a-source-scan/1.0"}
-    )
-    with urllib.request.urlopen(req, timeout=60) as r:
-        data = r.read()
+    def read(target: str) -> bytes:
+        req = urllib.request.Request(
+            target,
+            headers={"User-Agent": "ThePrintShop-Okidata82a83a-source-scan/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.read()
+
+    try:
+        data = read(url)
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", None)
+        mirror = "https://mirrors.apple2.org.za/"
+        if url.startswith(mirror) and isinstance(
+            reason, ssl.SSLCertVerificationError
+        ):
+            fallback = "http://" + url[len("https://"):]
+            print(
+                "warning: archive HTTPS certificate validation failed; "
+                f"retrying the same mirror over HTTP: {fallback}",
+                file=sys.stderr,
+            )
+            data = read(fallback)
+        else:
+            raise
+
     if len(data) != IMAGE_SIZE:
         raise ValueError(f"unexpected image size {len(data)} for {url}")
     return data
