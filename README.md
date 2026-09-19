@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**v0.1 executable disk build: implemented and CI-validated; emulator/hardware validation is next.**
+**R2 executable disk build: implemented and CI-validated; physical printer validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -65,12 +65,18 @@ It creates:
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 ```
 
-Current validated image:
+Current R2 validated image:
 
 ```
 size   143360 bytes
-SHA256 947e0929d894d6cc47aad760098c4b92e49b5796d939795b2a29f8a58e49d2f8
+SHA256 e404a536a5889ef051f58434b664fbcab22f31e060a9cd4c8077247a5e18d0f9
 ```
+
+R2 keeps the proven OkiGraph raster encoding and replaces the legacy ML92/93
+vertical-control behavior. Type-5 text CR/LF no longer sends `ESC % 9 n`.
+After a completed graphics chunk, the driver uses native OkiGraph graphics
+feed+CR (`$03 $0E`) and explicitly exits graphics (`$03 $02`) before the next
+Print Shop graphics transaction.
 
 The script uses an installed Merlin32 if available; otherwise it downloads
 the pinned v1.1.10 Windows build. It verifies the original runtime overlays
@@ -158,8 +164,9 @@ https://github.com/ppuskari/Okidata-Microline-82A-83A
 
 ## Next milestone
 
-Boot the generated executable disk in an Apple II emulator and then on physical
-hardware before beginning printer-output validation on the 82A and 83A.
+Validate the R2 disk on the physical 82A/83A. The specific targets are removal
+of the stray control/text output at graphics transitions, elimination of the
+extra vertical gap between seven-dot bands, and restoration of one-page layout.
 
 The first gate is the retained `ESC % 9 n` line-spacing command. If that
 works as expected, the next source build can preserve the original 92/93
