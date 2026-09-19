@@ -45,7 +45,10 @@ NEW_MENU = "OKI 82A/83A OKIGRAPH I "
 #   PLA(1)+ORA zp(2)+STX zp(2)+JSR(3)+LDX zp(2)+JSR(3)
 #   +CMP #(2)+BNE(2)+JSR(3) = 20
 #
-# R2 replacement removes the five v0.1 padding NOPs. PRCOMS is allowed to\n# grow within its existing DOS allocation because the assembler resolves all\n# internal addresses and the fixed $1800 jump table remains unchanged.\nGC5_OLD = re.compile(
+# R2 replacement removes the five v0.1 padding NOPs. PRCOMS is allowed to
+# grow within its existing DOS allocation because the assembler resolves all
+# internal addresses and the fixed $1800 jump table remains unchanged.
+GC5_OLD = re.compile(
     r"(?m)^GC5A PLA\n"
     r"[ \t]+ORA GCOLD\n"
     r"[ \t]+STX XTEMP\n"
