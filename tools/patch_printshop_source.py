@@ -359,7 +359,11 @@ def write_patched_disks(
     # Final content assertions against the generated disk images.
     rt1 = binary_source_text(out1, "PRCOMS.S")
     rt2 = binary_source_text(out2, "MENUS7.S")
-    if (" ORA #$80\n" not in rt1 or GC5_OLD.search(rt1) or\n            "CRLF5G LDA #00\n" not in rt1):
+    if (
+        " ORA #$80\n" not in rt1
+        or GC5_OLD.search(rt1)
+        or "CRLF5G LDA #00\n" not in rt1
+    ):
         raise RuntimeError("generated source disk 1 does not contain the OkiGraph GC5 patch")
     if NEW_MENU not in rt2 or OLD_MENU in rt2:
         raise RuntimeError("generated source disk 2 does not contain the OkiGraph menu patch")
