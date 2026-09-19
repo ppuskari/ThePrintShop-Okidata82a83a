@@ -72,6 +72,7 @@ jobs:
           sha256sum MENUS7 || true
 
       - name: Inspect Print Shop v2.035 production image
+        if: always()
         run: |
           curl -fL --retry 3 \
             "https://mirrors.apple2.org.za/ftp.apple.asimov.net/images/productivity/graphics/printshop/The%20Print%20Shop%20v2.035.2mg" \
@@ -89,6 +90,7 @@ jobs:
           sha256sum build/PRCOMS.RUNTIME build/MENUS7.RUNTIME 2>/dev/null || true
 
       - name: Upload compiled overlay diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: printshop-okigraph-compile-pass
