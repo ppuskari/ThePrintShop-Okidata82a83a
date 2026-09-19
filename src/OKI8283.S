@@ -1,33 +1,46 @@
 * THE PRINT SHOP V2 - OKIDATA 82A/83A OKIGRAPH I
 *
-* R2 integration notes
+* R3 integration notes
 *
-* The proven graphics byte conversion remains:
+* Proven graphics-byte conversion:
 *
 *   wire = $80 | reverse7(first | second)
 *
-* R2 adds a native OkiGraph control path around Print Shop CRLF.
+* Print Shop type 5 continues to frame each graphics chunk as:
 *
-* Type 5 text CR/LF:
-*   - skips the legacy ML92/93 ESC % 9 n spacing sequence
-*   - uses ordinary CR/LF so text remains in text state
+*   $03 <data> $03 $02
 *
-* Type 5 CR/LF immediately after a completed graphics chunk:
-*   - emits $03,$0E for native graphics LF + CR
-*   - emits $03,$02 immediately afterward so the next SGC5
-*     starts from text/control state as Print Shop expects
+* GC5 marks FIX80=1 after completing a graphics chunk so the
+* following CRLF can distinguish a graphics move from text CR/LF.
 *
-* GC5 marks FIX80=1 when it completes a graphics chunk.  FIX80 is
-* otherwise the type-2 private variable, so it is available for type 5.
+* R3 corrects two R2 hardware defects:
 *
-* The original fixed entry table remains at:
+* 1. Print Shop CRLF with Y=0 still means carriage return only.
+*    R2 emitted nothing, leaving the carriage at the right edge and
+*    allowing later raster rows to wander across the wide platen.
+*
+* 2. $03,$0E is an OkiGraph command used while already in graphics
+*    state.  Since GC5 has already exited graphics, R3 explicitly
+*    enters graphics before issuing native feed commands.
+*
+* Therefore the type-5 post-graphics CRLF wire behavior is:
+*
+*   Y=0:
+*       $0D
+*
+*   Y>0:
+*       $03                 enter graphics
+*       ($03,$0E) * Y       native graphics LF + CR
+*       $03,$02             exit graphics
+*
+* Type-5 text CR/LF bypasses the incompatible legacy ML92/93
+* ESC % 9 n programmable-spacing sequence.
+*
+* Fixed Print Shop entry table remains unchanged:
 *   $1800 COUT1
 *   $1803 CRLF
 *   $1806 SENDGC
 *   $1809 GCOUT1
-*
-* PRCOMS may grow inside its existing DOS allocation; all internal
-* addresses are reassembled and the fixed jump-table entries do not move.
 *
 * Graphics-byte core:
 *
@@ -40,16 +53,9 @@ GC5A   PLA
         JSR COUT1
 GC5B   PHA
 *
-* At the normal GC5 completion path, after:
-*
-*       LDA #03
-*       JSR COUT1
-*       LDA #02
-*       JSR COUT1
-*
-* R2 adds:
+* At normal GC5 completion, after $03,$02, R3 retains:
 *
 *       LDA #01
 *       STA FIX80
 *
-* The following CRLF sees FIX80 and uses the native graphics feed path.
+* The following CRLF consumes and clears this marker.
