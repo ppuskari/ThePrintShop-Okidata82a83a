@@ -103,11 +103,17 @@ CRLF2 LDA #$0A
  BPL CRLF2
  BMI CRLFX
 *
-* OKIGRAPH I TYPE-5 CR/LF
+* OKIGRAPH I TYPE-5 CR/LF - R3
 * Text CR/LF skips the legacy ML92/93 ESC % 9 n sequence.
-* A CR/LF immediately following GC5 uses the native graphics
-* feed command, then exits graphics so the next SGC5 $03 starts
-* from the expected text/control state.
+* GC5 has already exited graphics before CRLF is called.
+*
+* Y=0 is still a mandatory carriage return.  R2 accidentally
+* emitted nothing here, allowing the next raster row to begin
+* from the previous right-edge carriage position.
+*
+* For Y>0, explicitly enter graphics first, then issue the
+* native $03,$0E graphics LF+CR command while already in
+* graphics state.  Exit once all requested feeds are complete.
 *
 CRLF5 LDA FIX80
  BNE CRLF5G
@@ -123,17 +129,23 @@ CRLF5T LDA #$0A
 CRLF5G LDA #00
  STA FIX80
  DEY
- BMI CRLFX
+ BMI CRLF5C
+ LDA #03
+ JSR COUT1
 CRLF5L LDA #03
  JSR COUT1
  LDA #$0E
  JSR COUT1
+ DEY
+ BPL CRLF5L
  LDA #03
  JSR COUT1
  LDA #02
  JSR COUT1
- DEY
- BPL CRLF5L
+ JMP CRLFX
+CRLF5C LDA #$0D
+ JSR COUT1
+ JMP CRLFX
 CRLFX TXA
  PHA
  JSR UPLRK
@@ -408,8 +420,9 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R2 control path: type-5 CRLF bypasses ESC % 9 n")
-    print("  R2 graphics advance: $03 $0E followed by $03 $02")
+    print("  R3 control path: type-5 CRLF bypasses ESC % 9 n")
+    print("  R3 Y=0: mandatory carriage return preserved")
+    print("  R3 graphics advance: $03 enter, $03 $0E feed(s), $03 $02 exit")
     print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
