@@ -1,12 +1,8 @@
-"""Wire-level model of The Print Shop v2 OkiGraph I printer path.
-
-This models the deliberately small v0.1 change to Print Shop printer type 5:
-two 120-column/inch source bytes are ORed together, the lower seven bits are
-reversed for Okidata pin order, and bit 7 is forced high on the wire.
-"""
+"""Wire-level model of The Print Shop v2 OkiGraph I printer path."""
 
 ETX = 0x03
-ESC = 0x1B
+EXIT_GRAPHICS = 0x02
+GRAPHICS_LF_CR = 0x0E
 
 
 def reverse7(value: int) -> int:
@@ -36,16 +32,26 @@ def encode_columns(source: bytes) -> bytes:
 
 
 def graphics_record(source: bytes) -> bytes:
-    """Return one OkiGraph I graphics transaction."""
-    return bytes([ETX]) + encode_columns(source) + bytes([ETX, 0x02])
+    """Return one Print Shop graphics transaction."""
+    return bytes([ETX]) + encode_columns(source) + bytes([ETX, EXIT_GRAPHICS])
 
 
-def line_spacing_72(amount: int) -> bytes:
-    """Model Print Shop type-5 SETLF: ESC % 9 n, where n=2*amount.
+def text_crlf(count: int) -> bytes:
+    """R2 type-5 text CR/LF: no legacy ESC % 9 spacing sequence."""
+    if count < 0:
+        raise ValueError("count must be non-negative")
+    return bytes([0x0D]) + bytes([0x0A]) * count
 
-    Print Shop passes X as X/72 inch.  The Okidata command expresses the
-    spacing in 1/144-inch units, so the existing type-5 path doubles X.
+
+def graphics_crlf(count: int) -> bytes:
+    """R2 vertical move after a completed OkiGraph graphics transaction.
+
+    Print Shop exits graphics at the end of each chunk.  Each requested
+    vertical move therefore enters OkiGraph command state, performs the
+    native graphics LF+CR, then explicitly exits so the next SGC5 $03 starts
+    from the state expected by the original Print Shop transaction model.
     """
-    if not 0 <= amount <= 63:
-        raise ValueError("amount must fit the Okidata n/144-inch byte")
-    return bytes([ESC, ord("%"), ord("9"), amount * 2])
+    if count < 0:
+        raise ValueError("count must be non-negative")
+    one = bytes([ETX, GRAPHICS_LF_CR, ETX, EXIT_GRAPHICS])
+    return one * count
