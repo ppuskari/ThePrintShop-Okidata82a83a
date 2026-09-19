@@ -46,6 +46,13 @@ def main() -> int:
             print(text[:20000])
             print()
 
+    print("=== PRCOMS CONTROL-PATH REFERENCES ===")
+    prcoms = get_file(images[0], "PRCOMS.S")
+    for n, line in enumerate(prcoms.splitlines(), 1):
+        if re.search(r"\b(SETLF|CRLF|SENDGC|GCOUT1|SGC5|GC5)\b", line, re.I):
+            print(f"{n:5d}: {line}")
+    print()
+
     print("=== ASSEMBLY DIRECTIVE SUMMARY ===")
     pat = re.compile(
         r"\b(ORG|OBJ|PUT|USE|INCLUDE|SAV|SAVE|BSAVE|BLOAD|EXEC|ASM|END|EQU)\b",
