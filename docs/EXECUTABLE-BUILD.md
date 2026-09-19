@@ -154,3 +154,36 @@ Not yet verified:
   OkiGraph I ROMs.
 
 Those are the next validation gates.
+
+
+## R2 hardware-validation build
+
+The first physical print proved the raster path but exposed the legacy
+MICROLINE 92/93 control sequence as incompatible with the 82A/83A OkiGraph I
+ROMs: visible control garbage appeared around graphics entry, seven-dot bands
+were separated vertically, borders appeared doubled, and a nominal one-page
+design expanded to two sheets.
+
+R2 therefore keeps the proven graphics conversion but changes type-5 CR/LF
+handling:
+
+- text CR/LF bypasses the legacy `ESC % 9 n` programmable-spacing sequence;
+- a CR/LF immediately after a completed graphics chunk uses native OkiGraph
+  `$03 $0E` graphics feed + carriage return;
+- R2 then sends `$03 $02` to return to text/control state before the next
+  Print Shop `SGC5` transaction.
+
+Validated R2 executable:
+
+```
+PRCOMS.OKI
+length 2022
+SHA256 36bb58a82d312f51a26f1cd119faac56d9402a4e4fd9919d9c4700283d0ab3fb
+
+PrintShop-Okidata82a83a-OkiGraphI.dsk
+length 143360
+SHA256 e404a536a5889ef051f58434b664fbcab22f31e060a9cd4c8077247a5e18d0f9
+```
+
+The PRCOMS overlay still loads at `$1800` and remains within its original
+eight-sector DOS allocation.
