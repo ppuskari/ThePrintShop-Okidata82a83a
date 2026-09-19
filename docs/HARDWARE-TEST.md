@@ -8,27 +8,35 @@
 - whichever Apple II printer interface is actually connected; the v0.1
   driver does not alter Print Shop's interface-card layer
 
-## Prepare the patched source
+## Prepare the runnable disk
 
 From the repository root:
 
 ```powershell
-py -3 tools\patch_printshop_source.py --check
-py -3 tools\patch_printshop_source.py --output-dir build --output-disks build
-py -3 -m unittest discover -s tests -v
+.\scripts\Build-RuntimeDisk.ps1
 ```
 
-The generated local build inputs will be:
+Use this image for emulator and physical-machine testing:
 
-- `build/PRCOMS.OKI.S`
-- `build/MENUS7.OKI.S`
-- `build/PrintShop-V2-OkiGraph-source-1.dsk`
-- `build/PrintShop-V2-OkiGraph-source-2.dsk`
-- `build/PrintShop-V2-OkiGraph-source-3.dsk`
+```
+build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
+```
 
-Source disks 1 and 2 are rewritten through their existing DOS 3.3 T/S
-allocations and round-trip verified. Disk 3 is an unchanged local copy.
-No historical Brøderbund source or generated disk image is committed to the repository.
+The current validated build is 143,360 bytes with SHA-256:
+
+```
+947e0929d894d6cc47aad760098c4b92e49b5796d939795b2a29f8a58e49d2f8
+```
+
+The build performs an untouched control assembly before constructing the
+runtime. It verifies that the base disk's `PRCOMS` and `MENUS7` are exact
+matches for those control binaries, then installs the OkiGraph versions at
+their original load addresses (`$1800` and `$6300`) without reallocating
+their DOS files.
+
+The older source-only workflow remains available through
+`scripts\Build-DriverSource.ps1`, but those source disks are development
+inputs rather than the executable hardware-test artifact.
 
 ## Gate 1 - direct line-spacing behavior
 
