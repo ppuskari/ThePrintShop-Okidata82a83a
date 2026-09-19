@@ -1,0 +1,39 @@
+name: Build runnable OkiGraph Print Shop disk
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "tools/patch_printshop_source.py"
+      - "tools/prepare_merlin32_build.py"
+      - "tools/validate_overlay_build.py"
+      - "tools/build_runtime_disk.py"
+      - "scripts/Build-RuntimeDisk.ps1"
+      - ".github/workflows/runtime-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-runtime-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build runnable disk
+        shell: powershell
+        run: .\scripts\Build-RuntimeDisk.ps1
+      - name: Verify generated image exists
+        shell: powershell
+        run: |
+          $Disk = "build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk"
+          if (-not (Test-Path $Disk)) { throw "Runtime disk was not generated" }
+          $Info = Get-Item $Disk
+          if ($Info.Length -ne 143360) {
+            throw "Unexpected runtime disk size $($Info.Length)"
+          }
+          Get-FileHash -Algorithm SHA256 $Disk
