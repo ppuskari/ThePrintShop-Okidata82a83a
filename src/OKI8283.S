@@ -1,24 +1,35 @@
 * THE PRINT SHOP V2 - OKIDATA 82A/83A OKIGRAPH I
 *
-* v0.1 integration fragment
+* R2 integration notes
 *
-* This replaces the GC5A..GC5B transition inside the
-* existing printer-type-5 path in PRCOMS.S.
+* The proven graphics byte conversion remains:
 *
-* Entry/state are the original Print Shop type-5 ABI:
-*   A      = second 120-cpi source column
-*   GCOLD  = first 120-cpi source column
-*   XTEMP  = scratch used by the original routine
-*   COUT1  = configured printer-interface byte output
-*   REVBITS= reverse lower seven graphics bits
-*
-* Result:
 *   wire = $80 | reverse7(first | second)
 *
-* The five NOPs are intentional.  They make this block
-* occupy the same 20 machine-code bytes as the original
-* ML92/93 fragment, so all following PRCOMS addresses stay
-* unchanged in the first hardware-test build.
+* R2 adds a native OkiGraph control path around Print Shop CRLF.
+*
+* Type 5 text CR/LF:
+*   - skips the legacy ML92/93 ESC % 9 n spacing sequence
+*   - uses ordinary CR/LF so text remains in text state
+*
+* Type 5 CR/LF immediately after a completed graphics chunk:
+*   - emits $03,$0E for native graphics LF + CR
+*   - emits $03,$02 immediately afterward so the next SGC5
+*     starts from text/control state as Print Shop expects
+*
+* GC5 marks FIX80=1 when it completes a graphics chunk.  FIX80 is
+* otherwise the type-2 private variable, so it is available for type 5.
+*
+* The original fixed entry table remains at:
+*   $1800 COUT1
+*   $1803 CRLF
+*   $1806 SENDGC
+*   $1809 GCOUT1
+*
+* PRCOMS may grow inside its existing DOS allocation; all internal
+* addresses are reassembled and the fixed jump-table entries do not move.
+*
+* Graphics-byte core:
 *
 GC5A   PLA
         ORA GCOLD
@@ -27,13 +38,18 @@ GC5A   PLA
         ORA #$80
         LDX XTEMP
         JSR COUT1
-        NOP
-        NOP
-        NOP
-        NOP
-        NOP
 GC5B   PHA
 *
-* Continue with the unmodified original GC5B byte-count
-* handling.  SGC5 still emits $03 to enter graphics and the
-* original terminal path still emits $03,$02 to leave it.
+* At the normal GC5 completion path, after:
+*
+*       LDA #03
+*       JSR COUT1
+*       LDA #02
+*       JSR COUT1
+*
+* R2 adds:
+*
+*       LDA #01
+*       STA FIX80
+*
+* The following CRLF sees FIX80 and uses the native graphics feed path.
