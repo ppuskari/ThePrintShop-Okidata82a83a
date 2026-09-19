@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**v0.1 source patch: implemented and CI-validated; physical printer validation is next.**
+**v0.1 executable disk build: implemented and CI-validated; emulator/hardware validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -41,6 +41,45 @@ The initial patch is intentionally layout-preserving:
 - the existing type-5 line-spacing path is retained for hardware validation.
 
 The assembly core is in [`src/OKI8283.S`](src/OKI8283.S).
+
+## Runnable disk build
+
+The historical sources now assemble into real executable overlays with
+Merlin32. An untouched control build was compared against the archived
+`ColorPrintShop.DSK` runtime:
+
+- `PRCOMS`: 1,962 bytes, exact byte-for-byte match, load address `$1800`
+- `MENUS7`: 3,014 bytes, exact byte-for-byte match, load address `$6300`
+
+That establishes a compatible runtime base for this source snapshot.
+
+To build the actual runnable disk on Windows:
+
+```powershell
+.\scripts\Build-RuntimeDisk.ps1
+```
+
+It creates:
+
+```
+build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
+```
+
+Current validated image:
+
+```
+size   143360 bytes
+SHA256 947e0929d894d6cc47aad760098c4b92e49b5796d939795b2a29f8a58e49d2f8
+```
+
+The script uses an installed Merlin32 if available; otherwise it downloads
+the pinned v1.1.10 Windows build. It verifies the original runtime overlays
+against the control build before changing the disk, then rewrites only
+`PRCOMS` and `MENUS7` through their existing DOS T/S chains and verifies
+both files after read-back.
+
+See [`docs/EXECUTABLE-BUILD.md`](docs/EXECUTABLE-BUILD.md) for the complete
+reproducibility and validation record.
 
 ## Build / validate on Windows
 
@@ -84,19 +123,28 @@ GitHub Actions currently verifies:
 - the legacy raw-`$03` collision becomes `$83`;
 - OkiGraph transaction framing;
 - existing type-5 line-spacing encoding; and
-- exact applicability of the source patch to the 1987-01-26 source disks; and
-- DOS 3.3 source-disk rewrite/read-back through the original T/S chains.
+- exact applicability of the source patch to the 1987-01-26 source disks;
+- DOS source-disk rewrite/read-back through the original T/S chains;
+- untouched Merlin32 control overlays against the shipped runtime;
+- patched executable overlay sizes and hashes;
+- in-place runtime-disk replacement with preserved load addresses; and
+- the complete Windows build producing a deterministic 143,360-byte `.dsk`.
 
 ## Repository map
 
 - `src/OKI8283.S` — 6502 assembly integration fragment
 - `src/driver_model.py` — executable wire-level model
 - `tools/patch_printshop_source.py` — source transformation
+- `tools/prepare_merlin32_build.py` — Big Mac-to-Merlin32 build preparation
+- `tools/validate_overlay_build.py` — control/patched executable verification
+- `tools/build_runtime_disk.py` — verified executable disk construction
 - `tools/inspect_printshop_source.py` — reproducible historical-source scanner
 - `tests/test_driver_model.py` — regression tests
 - `docs/DESIGN.md` — source/driver architecture and design decisions
+- `docs/EXECUTABLE-BUILD.md` — executable overlay/runtime-disk build record
 - `docs/HARDWARE-TEST.md` — staged 82A/83A physical validation plan
-- `scripts/Build-DriverSource.ps1` — Windows validation/build helper
+- `scripts/Build-DriverSource.ps1` — source-disk build helper
+- `scripts/Build-RuntimeDisk.ps1` — one-command executable `.dsk` build
 
 ## Source basis
 
@@ -110,7 +158,8 @@ https://github.com/ppuskari/Okidata-Microline-82A-83A
 
 ## Next milestone
 
-Run v0.1 on a physical 82A and 83A with the reconstructed OkiGraph I ROMs.
+Boot the generated executable disk in an Apple II emulator and then on physical
+hardware before beginning printer-output validation on the 82A and 83A.
 
 The first gate is the retained `ESC % 9 n` line-spacing command. If that
 works as expected, the next source build can preserve the original 92/93
