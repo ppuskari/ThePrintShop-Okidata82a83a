@@ -8,9 +8,10 @@ sys.path.insert(0, str(ROOT / "src"))
 from driver_model import (  # noqa: E402
     encode_columns,
     encode_pair,
+    graphics_crlf,
     graphics_record,
-    line_spacing_72,
     reverse7,
+    text_crlf,
 )
 
 
@@ -33,8 +34,6 @@ class DriverModelTests(unittest.TestCase):
         self.assertNotIn(0x03, encoded)
 
     def test_old_etx_collision_becomes_83(self):
-        # reverse7(0x60) == 0x03.  The legacy 92/93 driver had to special-case
-        # this result; the OkiGraph I path makes it unambiguous by setting bit 7.
         self.assertEqual(reverse7(0x60), 0x03)
         self.assertEqual(encode_pair(0x60, 0x00), 0x83)
 
@@ -46,9 +45,18 @@ class DriverModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             encode_columns(b"\x01")
 
-    def test_existing_type5_line_spacing(self):
-        self.assertEqual(line_spacing_72(7), b"\x1b%9\x0e")
-        self.assertEqual(line_spacing_72(12), b"\x1b%9\x18")
+    def test_r2_text_crlf_has_no_legacy_escape_spacing(self):
+        self.assertEqual(text_crlf(0), b"\x0d")
+        self.assertEqual(text_crlf(2), b"\x0d\x0a\x0a")
+        self.assertNotIn(0x1B, text_crlf(2))
+
+    def test_r2_graphics_crlf_native_feed_and_exit(self):
+        self.assertEqual(graphics_crlf(0), b"")
+        self.assertEqual(graphics_crlf(1), b"\x03\x0e\x03\x02")
+        self.assertEqual(
+            graphics_crlf(2),
+            b"\x03\x0e\x03\x02\x03\x0e\x03\x02",
+        )
 
 
 if __name__ == "__main__":
