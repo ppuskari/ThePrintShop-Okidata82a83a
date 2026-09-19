@@ -45,10 +45,7 @@ NEW_MENU = "OKI 82A/83A OKIGRAPH I "
 #   PLA(1)+ORA zp(2)+STX zp(2)+JSR(3)+LDX zp(2)+JSR(3)
 #   +CMP #(2)+BNE(2)+JSR(3) = 20
 #
-# Replacement:
-#   PLA(1)+ORA zp(2)+STX zp(2)+JSR(3)+ORA #(2)+LDX zp(2)+JSR(3)
-#   +5*NOP(5) = 20
-GC5_OLD = re.compile(
+# R2 replacement removes the five v0.1 padding NOPs. PRCOMS is allowed to\n# grow within its existing DOS allocation because the assembler resolves all\n# internal addresses and the fixed $1800 jump table remains unchanged.\nGC5_OLD = re.compile(
     r"(?m)^GC5A PLA\n"
     r"[ \t]+ORA GCOLD\n"
     r"[ \t]+STX XTEMP\n"
@@ -68,12 +65,94 @@ GC5_NEW = """GC5A PLA
  ORA #$80
  LDX XTEMP
  JSR COUT1
- NOP
- NOP
- NOP
- NOP
- NOP
 GC5B PHA"""
+
+
+CRLF_OLD = re.compile(
+    r"(?m)^CRLF LDA #\$0D\n"
+    r"[ \t]+JSR COUT1\n"
+    r"[ \t]+JSR SETLF\n"
+    r"[ \t]+DEY\n"
+    r"[ \t]+BMI CRLFX\n"
+    r"^CRLF2 LDA #\$0A\n"
+    r"[ \t]+JSR COUT1\n"
+    r"[ \t]+DEY\n"
+    r"[ \t]+BPL CRLF2\n"
+    r"^CRLFX TXA\n"
+    r"[ \t]+PHA\n"
+    r"[ \t]+JSR UPLRK\n"
+    r"[ \t]+PLA\n"
+    r"[ \t]+TAX\n"
+    r"^SETLFX RTS$"
+)
+
+CRLF_NEW = """CRLF LDA PRTYPE
+ CMP #05
+ BEQ CRLF5
+ LDA #$0D
+ JSR COUT1
+ JSR SETLF
+ DEY
+ BMI CRLFX
+CRLF2 LDA #$0A
+ JSR COUT1
+ DEY
+ BPL CRLF2
+ BMI CRLFX
+*
+* OKIGRAPH I TYPE-5 CR/LF
+* Text CR/LF skips the legacy ML92/93 ESC % 9 n sequence.
+* A CR/LF immediately following GC5 uses the native graphics
+* feed command, then exits graphics so the next SGC5 $03 starts
+* from the expected text/control state.
+*
+CRLF5 LDA FIX80
+ BNE CRLF5G
+ LDA #$0D
+ JSR COUT1
+ DEY
+ BMI CRLFX
+CRLF5T LDA #$0A
+ JSR COUT1
+ DEY
+ BPL CRLF5T
+ BMI CRLFX
+CRLF5G LDA #00
+ STA FIX80
+ DEY
+ BMI CRLFX
+CRLF5L LDA #03
+ JSR COUT1
+ LDA #$0E
+ JSR COUT1
+ LDA #03
+ JSR COUT1
+ LDA #02
+ JSR COUT1
+ DEY
+ BPL CRLF5L
+CRLFX TXA
+ PHA
+ JSR UPLRK
+ PLA
+ TAX
+SETLFX RTS"""
+
+GC5_END_OLD = re.compile(
+    r"(?m)^LDA #03\n"
+    r"[ \t]+JSR COUT1\n"
+    r"[ \t]+LDA #02\n"
+    r"[ \t]+JSR COUT1\n"
+    r"^GC5X PLA$"
+)
+
+GC5_END_NEW = """LDA #03
+ JSR COUT1
+ LDA #02
+ JSR COUT1
+ LDA #01
+ STA FIX80
+GC5X PLA"""
 
 
 def sha256_text(text: str) -> str:
@@ -139,13 +218,31 @@ def replace_once(text: str, old: str, new: str, what: str) -> str:
 
 
 def patch_prcoms(text: str) -> str:
-    matches = list(GC5_OLD.finditer(text))
-    if len(matches) != 1:
+    gc_matches = list(GC5_OLD.finditer(text))
+    if len(gc_matches) != 1:
         raise RuntimeError(
             "PRCOMS.S GC5 block: expected exactly one legacy type-5 block, "
-            f"found {len(matches)}"
+            f"found {len(gc_matches)}"
         )
-    return GC5_OLD.sub(GC5_NEW, text, count=1)
+
+    crlf_matches = list(CRLF_OLD.finditer(text))
+    if len(crlf_matches) != 1:
+        raise RuntimeError(
+            "PRCOMS.S CRLF block: expected exactly one original block, "
+            f"found {len(crlf_matches)}"
+        )
+
+    patched = CRLF_OLD.sub(CRLF_NEW, text, count=1)
+    patched = GC5_OLD.sub(GC5_NEW, patched, count=1)
+
+    end_matches = list(GC5_END_OLD.finditer(patched))
+    if len(end_matches) != 1:
+        raise RuntimeError(
+            "PRCOMS.S GC5 termination: expected exactly one block, "
+            f"found {len(end_matches)}"
+        )
+
+    return GC5_END_OLD.sub(GC5_END_NEW, patched, count=1)
 
 
 def patch_menus(text: str) -> str:
@@ -259,7 +356,7 @@ def write_patched_disks(
     # Final content assertions against the generated disk images.
     rt1 = binary_source_text(out1, "PRCOMS.S")
     rt2 = binary_source_text(out2, "MENUS7.S")
-    if " ORA #$80\n" not in rt1 or GC5_OLD.search(rt1):
+    if (" ORA #$80\n" not in rt1 or GC5_OLD.search(rt1) or\n            "CRLF5G LDA #00\n" not in rt1):
         raise RuntimeError("generated source disk 1 does not contain the OkiGraph GC5 patch")
     if NEW_MENU not in rt2 or OLD_MENU in rt2:
         raise RuntimeError("generated source disk 2 does not contain the OkiGraph menu patch")
@@ -304,8 +401,7 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  GC5 machine-code block: 20 -> 20 bytes by construction")
-    print("  graphics data: reverse7(pair OR) | $80")
+    print("  R2 control path: type-5 CRLF bypasses ESC % 9 n")\n    print("  R2 graphics advance: $03 $0E followed by $03 $02")\n    print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
     print(f"  MENUS7 source high-bit ratio: {menus7_info['high_ratio']:.3f}")
