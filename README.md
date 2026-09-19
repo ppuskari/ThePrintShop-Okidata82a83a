@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R2 executable disk build: implemented and CI-validated; physical printer validation is next.**
+**R3 executable disk build: implemented and CI-validated; physical printer validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -65,18 +65,30 @@ It creates:
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 ```
 
-Current R2 validated image:
+Current R3 validated image:
 
 ```
 size   143360 bytes
-SHA256 e404a536a5889ef051f58434b664fbcab22f31e060a9cd4c8077247a5e18d0f9
+SHA256 a50158701b931c3cc555ef261790f350aa6678b784cd39b9afaa76bd68856c8f
 ```
 
-R2 keeps the proven OkiGraph raster encoding and replaces the legacy ML92/93
-vertical-control behavior. Type-5 text CR/LF no longer sends `ESC % 9 n`.
-After a completed graphics chunk, the driver uses native OkiGraph graphics
-feed+CR (`$03 $0E`) and explicitly exits graphics (`$03 $02`) before the next
-Print Shop graphics transaction.
+R1 proved the raster encoding but exposed the incompatible ML92/93 spacing
+sequence. R2 was rejected on hardware: it accidentally suppressed the
+mandatory carriage return when Print Shop requested CRLF with Y=0, and it
+issued `$03 $0E` before actually re-entering OkiGraph graphics state. On the
+wide-carriage printer this allowed subsequent raster rows to begin from the
+previous right-edge carriage position.
+
+R3 keeps the proven raster conversion, removes the legacy `ESC % 9 n`
+sequence, restores the Y=0 carriage return, and for graphics feeds emits:
+
+```
+$03                  enter graphics
+($03 $0E) * Y        native graphics LF + CR
+$03 $02              exit graphics
+```
+
+That keeps `$03 $0E` in its validated graphics-state context.
 
 The script uses an installed Merlin32 if available; otherwise it downloads
 the pinned v1.1.10 Windows build. It verifies the original runtime overlays
@@ -164,7 +176,7 @@ https://github.com/ppuskari/Okidata-Microline-82A-83A
 
 ## Next milestone
 
-Validate the R2 disk on the physical 82A/83A. The specific targets are removal
+Validate the R3 disk on the physical 82A/83A. The specific targets are removal
 of the stray control/text output at graphics transitions, elimination of the
 extra vertical gap between seven-dot bands, and restoration of one-page layout.
 
