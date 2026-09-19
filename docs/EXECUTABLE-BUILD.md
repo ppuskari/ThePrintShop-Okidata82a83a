@@ -156,7 +156,7 @@ Not yet verified:
 Those are the next validation gates.
 
 
-## R2 hardware-validation build
+## Hardware-validation progression
 
 The first physical print proved the raster path but exposed the legacy
 MICROLINE 92/93 control sequence as incompatible with the 82A/83A OkiGraph I
@@ -164,26 +164,41 @@ ROMs: visible control garbage appeared around graphics entry, seven-dot bands
 were separated vertically, borders appeared doubled, and a nominal one-page
 design expanded to two sheets.
 
-R2 therefore keeps the proven graphics conversion but changes type-5 CR/LF
-handling:
+R2 removed the legacy `ESC % 9 n` path, but hardware rejected R2.  Two
+control-state mistakes were identified:
 
-- text CR/LF bypasses the legacy `ESC % 9 n` programmable-spacing sequence;
-- a CR/LF immediately after a completed graphics chunk uses native OkiGraph
-  `$03 $0E` graphics feed + carriage return;
-- R2 then sends `$03 $02` to return to text/control state before the next
-  Print Shop `SGC5` transaction.
+1. Print Shop calls CRLF with Y=0 to request a carriage return without a line
+   feed.  R2 emitted nothing for that case, so the next raster row could begin
+   from the previous right-edge carriage position and travel across the wide
+   platen.
+2. R2 emitted `$03 $0E` immediately after GC5 had already exited graphics.
+   The reconstructed OkiGraph protocol requires `$03 $0E` to be issued while
+   already in graphics state.
 
-Validated R2 executable:
+R3 preserves the proven raster conversion and fixes both behaviors.  Type-5
+text CR/LF still bypasses `ESC % 9 n`.  After a graphics chunk:
+
+```
+Y = 0:
+    $0D
+
+Y > 0:
+    $03                  enter graphics
+    ($03 $0E) * Y        native graphics LF + CR
+    $03 $02              exit graphics
+```
+
+Validated R3 executable:
 
 ```
 PRCOMS.OKI
-length 2022
-SHA256 36bb58a82d312f51a26f1cd119faac56d9402a4e4fd9919d9c4700283d0ab3fb
+length 2038
+SHA256 3d17084c6d41947ea3707e2bd128d806cfc8422024280a27d7286e65d344fb5e
 
 PrintShop-Okidata82a83a-OkiGraphI.dsk
 length 143360
-SHA256 e404a536a5889ef051f58434b664fbcab22f31e060a9cd4c8077247a5e18d0f9
+SHA256 a50158701b931c3cc555ef261790f350aa6678b784cd39b9afaa76bd68856c8f
 ```
 
-The PRCOMS overlay still loads at `$1800` and remains within its original
-eight-sector DOS allocation.
+The PRCOMS overlay still loads at `$1800` and remains within its existing
+DOS allocation.
