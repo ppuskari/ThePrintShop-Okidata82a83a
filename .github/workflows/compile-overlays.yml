@@ -32,44 +32,65 @@ jobs:
           cp build/merlin32/Source/merlin32 build/merlin32-bin
           chmod +x build/merlin32-bin
 
-      - name: Prepare SAV-enabled assembly sources
+      - name: Prepare original and patched Merlin32 sources
         run: |
           python - <<'PY'
+          import re
+          import sys
           from pathlib import Path
-          for src, out, name in [
-              ("build/PRCOMS.OKI.S", "build/PRCOMS.BUILD.S", "PRCOMS"),
-              ("build/MENUS7.OKI.S", "build/MENUS7.BUILD.S", "MENUS7"),
-          ]:
-              text = Path(src).read_text(encoding="ascii")
+          sys.path.insert(0, "tools")
+          from patch_printshop_source import load_image, binary_source_text
+
+          d1 = load_image(None, 0)
+          d2 = load_image(None, 1)
+          Path("build/PRCOMS.ORIG.S").write_text(
+              binary_source_text(d1, "PRCOMS.S"), encoding="ascii"
+          )
+          Path("build/MENUS7.ORIG.S").write_text(
+              binary_source_text(d2, "MENUS7.S"), encoding="ascii"
+          )
+
+          def normalize_bigmac(text):
+              # Merlin32 accepts ordinary Big Mac syntax, but punctuation
+              # character immediates such as #',' need numeric spelling.
+              return re.sub(
+                  r"#'([^'])'",
+                  lambda m: "#$%02X" % ord(m.group(1)),
+                  text,
+              )
+
+          def savify(src, out, save_name):
+              text = normalize_bigmac(Path(src).read_text(encoding="ascii"))
               lines = text.splitlines()
-              idx = None
-              for i in range(len(lines)-1, -1, -1):
-                  if lines[i].strip().upper() == "END":
-                      idx = i
-                      break
+              idx = next(
+                  (i for i in range(len(lines)-1, -1, -1)
+                   if lines[i].strip().upper() == "END"),
+                  None,
+              )
               if idx is None:
                   raise SystemExit(f"{src}: no final END")
-              lines.insert(idx, f" SAV {name}")
+              lines.insert(idx, f" SAV {save_name}")
               Path(out).write_text("\n".join(lines) + "\n", encoding="ascii")
+
+          savify("build/PRCOMS.ORIG.S", "build/PRCOMS.ORIG.BUILD.S", "PRCOMS.ORIG")
+          savify("build/PRCOMS.OKI.S",  "build/PRCOMS.OKI.BUILD.S",  "PRCOMS.OKI")
+          savify("build/MENUS7.ORIG.S", "build/MENUS7.ORIG.BUILD.S", "MENUS7.ORIG")
+          savify("build/MENUS7.OKI.S",  "build/MENUS7.OKI.BUILD.S",  "MENUS7.OKI")
           PY
 
-      - name: Assemble PRCOMS control
+      - name: Assemble original and patched overlays
         run: |
           cd build
-          ./merlin32-bin PRCOMS.BUILD.S
-          echo "=== AFTER PRCOMS ==="
-          ls -l
-          sha256sum PRCOMS || true
-
-      - name: Diagnose and assemble MENUS7
-        run: |
-          cd build
-          echo "=== MENUS7 LINES 62-78 ==="
-          nl -ba MENUS7.BUILD.S | sed -n '62,78p'
-          ./merlin32-bin MENUS7.BUILD.S
-          echo "=== AFTER MENUS7 ==="
-          ls -l
-          sha256sum MENUS7 || true
+          ./merlin32-bin PRCOMS.ORIG.BUILD.S
+          ./merlin32-bin PRCOMS.OKI.BUILD.S
+          ./merlin32-bin MENUS7.ORIG.BUILD.S
+          ./merlin32-bin MENUS7.OKI.BUILD.S
+          echo "=== OVERLAY OUTPUTS ==="
+          ls -l PRCOMS.ORIG PRCOMS.OKI MENUS7.ORIG MENUS7.OKI
+          sha256sum PRCOMS.ORIG PRCOMS.OKI MENUS7.ORIG MENUS7.OKI
+          echo "=== BYTE DIFFERENCES ==="
+          cmp -l PRCOMS.ORIG PRCOMS.OKI | head -40 || true
+          cmp -l MENUS7.ORIG MENUS7.OKI | head -80 || true
 
       - name: Inspect Print Shop v2.035 production image
         if: always()
@@ -83,11 +104,11 @@ jobs:
           chmod +x build/ac
           echo "=== PRODUCTION IMAGE DIRECTORY ==="
           build/ac -ll build/PrintShop-v2.035.2mg
-          echo "=== TRY EXTRACT PRCOMS/MENUS7 ==="
-          build/ac -g build/PrintShop-v2.035.2mg PRCOMS build/PRCOMS.RUNTIME || true
-          build/ac -g build/PrintShop-v2.035.2mg MENUS7 build/MENUS7.RUNTIME || true
-          ls -l build/PRCOMS.RUNTIME build/MENUS7.RUNTIME 2>/dev/null || true
-          sha256sum build/PRCOMS.RUNTIME build/MENUS7.RUNTIME 2>/dev/null || true
+          echo "=== 5.25 RUNTIME ARCHIVE CONTENTS ==="
+          curl -fL --retry 3 \
+            "https://mirrors.apple2.org.za/ftp.apple.asimov.net/images/productivity/graphics/printshop/Print_Shop.zip" \
+            -o build/Print_Shop.zip
+          unzip -l build/Print_Shop.zip
 
       - name: Upload compiled overlay diagnostics
         if: always()
@@ -95,8 +116,8 @@ jobs:
         with:
           name: printshop-okigraph-compile-pass
           path: |
-            build/PRCOMS
-            build/MENUS7
-            build/PRCOMS.RUNTIME
-            build/MENUS7.RUNTIME
+            build/PRCOMS.ORIG
+            build/PRCOMS.OKI
+            build/MENUS7.ORIG
+            build/MENUS7.OKI
           if-no-files-found: warn
