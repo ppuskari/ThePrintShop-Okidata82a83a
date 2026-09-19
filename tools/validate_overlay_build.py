@@ -9,7 +9,7 @@ import pathlib
 
 EXPECTED = {
     "PRCOMS.ORIG": (1962, "6fb3928799f085967822362a3e7ba0b88dadd21e7e33372951e5734578c4629a"),
-    # R2 hash is pinned after the first cross-build; size must still fit the\n    # existing eight-sector DOS allocation (2044 payload bytes).\n    "PRCOMS.OKI":  (None, None),
+    "PRCOMS.OKI":  (2022, "36bb58a82d312f51a26f1cd119faac56d9402a4e4fd9919d9c4700283d0ab3fb"),
     "MENUS7.ORIG": (3014, "86d7fa76bfd693d461aa9085e3612253837e7f5f02a6027581beef3284c5355f"),
     "MENUS7.OKI":  (3014, "dcc17130eeb49dc829627dbd30e2594168d3c907b070a049850dc607742c6c32"),
 }
@@ -30,10 +30,6 @@ def main() -> int:
         actual_hash = hashlib.sha256(data).hexdigest()
         if size is not None and len(data) != size:
             raise RuntimeError(f"{name}: expected {size} bytes, got {len(data)}")
-        if name == "PRCOMS.OKI" and len(data) > 2044:
-            raise RuntimeError(
-                f"{name}: {len(data)} bytes exceed the existing DOS payload capacity"
-            )
         if expected_hash is not None and actual_hash != expected_hash:
             raise RuntimeError(
                 f"{name}: expected {expected_hash}, got {actual_hash}"
