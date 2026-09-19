@@ -14,16 +14,21 @@ From the repository root:
 
 ```powershell
 py -3 tools\patch_printshop_source.py --check
-py -3 tools\patch_printshop_source.py --output-dir build
+py -3 tools\patch_printshop_source.py --output-dir build --output-disks build
 py -3 -m unittest discover -s tests -v
 ```
 
-The decoded modified source will be:
+The generated local build inputs will be:
 
 - `build/PRCOMS.OKI.S`
 - `build/MENUS7.OKI.S`
+- `build/PrintShop-V2-OkiGraph-source-1.dsk`
+- `build/PrintShop-V2-OkiGraph-source-2.dsk`
+- `build/PrintShop-V2-OkiGraph-source-3.dsk`
 
-No historical Brøderbund source is committed to the repository.
+Source disks 1 and 2 are rewritten through their existing DOS 3.3 T/S
+allocations and round-trip verified. Disk 3 is an unchanged local copy.
+No historical Brøderbund source or generated disk image is committed to the repository.
 
 ## Gate 1 - direct line-spacing behavior
 
