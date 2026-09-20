@@ -1,40 +1,43 @@
 * THE PRINT SHOP V2 - OKIDATA 82A/83A OKIGRAPH I
 *
-* R3 integration notes
+* R4 integration notes
 *
 * Proven graphics-byte conversion:
 *
 *   wire = $80 | reverse7(first | second)
 *
-* Print Shop type 5 continues to frame each graphics chunk as:
+* Print Shop type 5 still frames each graphics chunk as:
 *
 *   $03 <data> $03 $02
 *
-* GC5 marks FIX80=1 after completing a graphics chunk so the
-* following CRLF can distinguish a graphics move from text CR/LF.
+* R4 fixes vertical geometry by emulating Print Shop's line-spacing
+* semantics in the driver instead of using the ML92/93 interpretation.
 *
-* R3 corrects two R2 hardware defects:
+* Print Shop CRLF contract:
+*   X = spacing in 1/72 inch
+*   X = 0 means retain prior spacing
+*   Y = number of line advances
 *
-* 1. Print Shop CRLF with Y=0 still means carriage return only.
-*    R2 emitted nothing, leaving the carriage at the right edge and
-*    allowing later raster rows to wander across the wide platen.
+* For the normal graphics loop Print Shop does:
 *
-* 2. $03,$0E is an OkiGraph command used while already in graphics
-*    state.  Since GC5 has already exited graphics, R3 explicitly
-*    enters graphics before issuing native feed commands.
+*   X=7,Y=0    establish 7/72 inch spacing
+*   X=0,Y=1    advance one graphics row
+*   X=0,Y=1    advance next row
+*   ...
 *
-* Therefore the type-5 post-graphics CRLF wire behavior is:
+* The 82A/83A OkiGraph I ROM's ESC % 9 n path schedules direct
+* n/144-inch vertical motion; it is not the persistent SETLF state
+* expected by the original ML92/93 driver.
 *
-*   Y=0:
-*       $0D
+* R4 therefore uses FIX80 as a type-5 cached spacing byte:
 *
-*   Y>0:
-*       $03                 enter graphics
-*       ($03,$0E) * Y       native graphics LF + CR
-*       $03,$02             exit graphics
+*   X != 0     FIX80 = 2*X
+*   Y times    CR, then ESC % 9 FIX80 for each direct feed
 *
-* Type-5 text CR/LF bypasses the incompatible legacy ML92/93
-* ESC % 9 n programmable-spacing sequence.
+* Thus the 7-dot graphics loop advances exactly 14/144 inch per
+* band, matching Print Shop's requested 7/72-inch geometry.
+*
+* No ordinary LF is emitted on the type-5 R4 path.
 *
 * Fixed Print Shop entry table remains unchanged:
 *   $1800 COUT1
@@ -52,10 +55,3 @@ GC5A   PLA
         LDX XTEMP
         JSR COUT1
 GC5B   PHA
-*
-* At normal GC5 completion, after $03,$02, R3 retains:
-*
-*       LDA #01
-*       STA FIX80
-*
-* The following CRLF consumes and clears this marker.
