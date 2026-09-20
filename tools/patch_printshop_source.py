@@ -54,10 +54,10 @@ GC5_OLD = re.compile(
     r"[ \t]+STX XTEMP\n"
     r"[ \t]+JSR REVBITS\n"
     r"[ \t]+LDX XTEMP\n"
-    r"[ \t]+JSR COUT1\n"
+    r"[ \t]*JSR COUT1\n"
     r"[ \t]+CMP #03\n"
     r"[ \t]+BNE GC5B\n"
-    r"[ \t]+JSR COUT1\n"
+    r"[ \t]*JSR COUT1\n"
     r"^GC5B PHA$"
 )
 
@@ -73,12 +73,12 @@ GC5B PHA"""
 
 CRLF_OLD = re.compile(
     r"(?m)^CRLF LDA #\$0D\n"
-    r"[ \t]+JSR COUT1\n"
+    r"[ \t]*JSR COUT1\n"
     r"[ \t]+JSR SETLF\n"
     r"[ \t]+DEY\n"
     r"[ \t]+BMI CRLFX\n"
     r"^CRLF2 LDA #\$0A\n"
-    r"[ \t]+JSR COUT1\n"
+    r"[ \t]*JSR COUT1\n"
     r"[ \t]+DEY\n"
     r"[ \t]+BPL CRLF2\n"
     r"^CRLFX TXA\n"
@@ -167,7 +167,7 @@ SGC5_OLD = re.compile(
     r"[ \t]+LDA #00\n"
     r"[ \t]+STA GCINDEX\n"
     r"[ \t]+LDA #03\n"
-    r"[ \t]+JMP COUT1$"
+    r"[ \t]*JMP COUT1$"
 )
 
 SGC5_NEW = """SGC5 STX TEMPLO
@@ -183,9 +183,9 @@ SGC5X RTS"""
 
 GC5_END_OLD = re.compile(
     r"(?m)^[ \t]+LDA #03\n"
-    r"[ \t]+JSR COUT1\n"
+    r"[ \t]*JSR COUT1\n"
     r"[ \t]+LDA #02\n"
-    r"[ \t]+JSR COUT1\n"
+    r"[ \t]*JSR COUT1\n"
     r"^GC5X PLA$"
 )
 
@@ -218,11 +218,11 @@ COUT1A LDX PITYPE
 
 SETLF5_OLD = re.compile(
     r"(?m)^SETLF5 LDA #\$25\n"
-    r"[ \t]+JSR COUT1\n"
-    r"[ \t]+LDA #\$39\n"
-    r"[ \t]+JSR COUT1\n"
-    r"[ \t]+TXA\n"
-    r"[ \t]+ASL\n"
+    r"[ \t]*JSR COUT1\n"
+    r"[ \t]*LDA #\$39\n"
+    r"[ \t]*JSR COUT1\n"
+    r"[ \t]*TXA\n"
+    r"[ \t]*ASL\n"
     r"[ \t]+JMP COUT1$"
 )
 
