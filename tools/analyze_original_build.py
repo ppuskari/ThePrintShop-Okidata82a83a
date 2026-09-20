@@ -85,6 +85,21 @@ def main() -> int:
                     print()
     print()
 
+    print("=== ZERO-PAGE B9/BC ALIASES ===")
+    for addr in ("B9", "BC"):
+        print(f"--- ${addr} ---")
+        pat = re.compile(rf"\\bEQU\\s+\\$?{addr}\\b", re.I)
+        for d, img in enumerate(images, 1):
+            for e in catalog(img):
+                if not e["name"].upper().endswith(".S"):
+                    continue
+                txt = decode(file_sectors(img, e))
+                for n, line in enumerate(txt.splitlines(), 1):
+                    if pat.search(line):
+                        print("D{} {}:{}: {}".format(d, e["name"], n, line))
+        print()
+    print()
+
     print("=== SCRATCH SYMBOL REFERENCES ===")
     for symbol in ("FIX80", "GCINDEX", "GCOLD", "QL", "QH"):
         print(f"--- {symbol} ---")
