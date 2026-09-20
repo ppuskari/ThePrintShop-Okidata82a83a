@@ -275,6 +275,12 @@ def main() -> int:
             break
     print()
 
+    print("=== GCDRAW SYMBOLS 1-110 ===")
+    gcs = get_file(images[1], "GCDRAW.S").splitlines()
+    for j in range(0, min(110, len(gcs))):
+        print(f"{j + 1:5d}: {gcs[j]}")
+    print()
+
     print("=== GCDRAW REVCHK / RASTER OUTPUT 1415-1610 ===")
     gcr = get_file(images[1], "GCDRAW.S").splitlines()
     for j in range(1414, min(1610, len(gcr))):
