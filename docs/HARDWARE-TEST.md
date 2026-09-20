@@ -1,10 +1,10 @@
 # Hardware validation plan
 
-## R8 target
+## R9 target
 
 - Apple II / IIe-class Print Shop v2 environment
 - Okidata MICROLINE 82A or 83A with validated OkiGraph I ROMs
-- current repository R8 runtime disk
+- current repository R9 runtime disk
 - normal Apple II printer interface path; R8 does not change the interface-card
   layer
 
@@ -19,7 +19,7 @@ Expected image:
 ```
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 143360 bytes
-SHA256 fc0c54c0d457845e27cc259429e36ce1604684df6bb22eabbe63f270669de92b
+SHA256 29d2eae0d4f0eb3c221be125fc705b2cbcbcbef104fabefb990b3525a642d08d
 ```
 
 ## Gate 1 - top-of-page first raster
@@ -27,7 +27,7 @@ SHA256 fc0c54c0d457845e27cc259429e36ce1604684df6bb22eabbe63f270669de92b
 Physically place the desired top graphics pin at the intended top raster
 baseline before starting the Print Shop output.
 
-R8 is specifically designed so the first outside-card DUMP does **not**
+R8/R9 are specifically designed so the first outside-card DUMP does **not**
 advance the paper before its first raster row.
 
 Confirm:
@@ -45,7 +45,7 @@ R7 showed a repeatable small vertical discontinuity when the application
 changed from THINKING back to PRINTING. The screen routines themselves do not
 touch the printer; source tracing located the boundary inside GCDRAW/DRAW1.
 
-R8 should produce one native graphics feed at later DUMP starts, exactly like
+R9 should produce one native graphics feed at later DUMP starts, exactly like
 ordinary in-piece band stepping.
 
 Confirm whether the repeated micro-gap:
@@ -120,3 +120,24 @@ Record:
 - total measured vertical size/error;
 - close-up of the missing motif region; and
 - any carriage-position or graphics-state anomaly.
+
+
+## R9 vertical resampling gate
+
+For the monochrome type-5 greeting-card path, R9 changes each historical
+28-band piece into 26 output bands. Fourteen individual source rows are
+skipped in a distributed pattern; no complete seven-row source band is
+discarded.
+
+Check:
+
+- total card height compared with the R8 sheet;
+- top and bottom border alignment on 8.5 x 11 paper;
+- whether the fold-over gap remains correct;
+- whether any new horizontal discontinuity appears at the distributed
+  single-row resample points;
+- whether the existing right-edge missing-motif and localized raster defects
+  change or remain identical.
+
+The expected geometric change from R8 is approximately 14/15 in the
+card-piece vertical dimension. The first and final source rows are preserved.
