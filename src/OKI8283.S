@@ -1,47 +1,46 @@
 * THE PRINT SHOP V2 - OKIDATA 82A/83A OKIGRAPH I
 *
-* R5 integration notes
+* R6 integration notes
 *
 * Proven graphics-byte conversion:
 *
 *   wire = $80 | reverse7(first | second)
 *
-* R4 hardware testing showed that repeated exit/re-enter framing was still
-* producing bad band geometry and an occasional lost carriage at the
-* left/right-half transition.
+* R5 hardware testing was the closest result yet: continuous graphics state
+* eliminated most of the seven-dot seams and stopped the wide-platen runaway.
+* The R5 sheet also exposed two remaining control problems:
 *
-* Source tracing shows Print Shop's normal graphics loop is:
+*   - stale FIX80 state was possible before the first type-5 printer call;
+*   - large/text-mode reposition calls still used the printer's default LF,
+*     ignoring Print Shop's requested X spacing.
 *
-*   CRLF X=7,Y=0       setup before first row
-*   CRLF X=0,Y=1       advance to row
-*   SENDGC / GCOUT1    print one seven-line band
-*   ...
-*   CRLF X=0,Y=1       next band
-*   SENDGC / GCOUT1
+* R6 initializes the type-5 state when MENUS7 commits PRTYPE:
 *
-* R5 therefore keeps OkiGraph graphics state active across the ordinary
-* X=0,Y>0 band-to-band CRLF calls and uses the firmware-backed native:
+*   $B9 (FIX80) = 0         text/control state
+*   $BC (QL)    = $18       default 24/144 = 1/6 inch spacing
 *
-*   $03,$0E            graphics LF + carriage return
+* PRCOMS then caches every nonzero Print Shop X as:
 *
-* FIX80 is type-5 graphics state:
+*   QL = 2 * X             requested spacing in 1/144-inch units
 *
-*   0 = text/control mode
-*   1 = graphics mode
+* Normal in-graphics X=0,Y>0 band advances remain:
 *
-* SGC5 emits the initial $03 only when FIX80=0.
-* GC5 no longer emits $03,$02 at the end of every chunk.
+*   $03,$0E                native graphics LF + CR
 *
-* Any spacing/boundary CRLF (X!=0), CR-only call (Y=0), or ordinary COUT1
-* output forces a clean:
+* and OkiGraph remains in graphics mode across the next SENDGC.
 *
-*   $03,$02            exit graphics
+* Spacing/boundary or text-mode CRLF exits graphics if needed, emits CR, then
+* performs each requested Y advance as:
 *
-* before returning to text/control output.  This is specifically intended to
-* protect setup-test returns and left/right page-half transitions.
+*   ESC '%' '9' QL         direct vertical motion
 *
-* Fixed Print Shop entry table remains:
-*   $1800 COUT1
-*   $1803 CRLF
-*   $1806 SENDGC
-*   $1809 GCOUT1
+* with NO ordinary LF appended.  This preserves the improvement from R5 while
+* removing the double/default-feed contribution to page-half spacing.
+*
+* Ordinary COUT1 output still forces a clean $03,$02 graphics exit first.
+*
+* R6 remains inside the original PRCOMS memory window:
+*
+*   load   $1800
+*   length 2042 bytes
+*   end    below $2000
