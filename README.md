@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R7 executable disk build: implemented and CI-validated; physical printer validation is next.**
+**R11 executable disk build: implemented and CI-validated; physical printer validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -29,6 +29,29 @@ wire = $80 | reverse7(source0 | source1)
 
 Forcing bit 7 high preserves the seven dot bits while preventing graphics
 data from ever colliding with OkiGraph's ETX (`$03`) command prefix.
+
+## R11 horizontal-stream test
+
+R11 keeps the R10/R9A geometry and changes only the type-5 graphics-data
+escaping. The historical Oki type-5 path emits seven-bit graphics bytes
+directly and doubles a literal ETX (`$03`) as `$03,$03`. Earlier OkiGraph
+builds forced bit 7 instead (`$83`), which is now under hardware test as a
+possible source of mid-row column loss if the printer parser treats graphics
+data as seven-bit.
+
+Validated R11 runtime image:
+
+```
+size   143360 bytes
+SHA256 1a40ea0430d472635279ff1bc9a3125e64def52ef0973f02ad1d19532884f830
+```
+
+Validated R11 PRCOMS overlay:
+
+```
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+```
 
 ## Driver evolution
 
