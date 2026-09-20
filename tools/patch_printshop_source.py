@@ -250,13 +250,91 @@ ROW LDX #00
  JSR CRLF
 ROW0 LDA COLORPR"""
 
+GCDRAW_ROWCOUNT_OLD = """DUMP0A LDA #28
+ LDX COLORPR
+ BEQ DUMP0B
+ LDA #07
+DUMP0B STA ROWCNT
+ LDA SIDE
+ CMP #02
+ BNE DUMP1
+ ASL ROWCNT"""
+
+GCDRAW_ROWCOUNT_NEW = """DUMP0A LDA #28
+ LDX COLORPR
+ BNE DUMP0C
+ LDX SIDE
+ CPX #02
+ BEQ DUMP0B
+ LDA #26
+ BNE DUMP0B
+DUMP0C LDA #07
+DUMP0B STA ROWCNT
+ LDA SIDE
+ CMP #02
+ BNE DUMP1
+ ASL ROWCNT"""
+
+GCDRAW_STEP_OLD = """SR08 STA BADDR+1
+*
+SR08A DEC ROWCNT
+ BNE SR09
+ RTS"""
+
+GCDRAW_STEP_NEW = """SR08 STA BADDR+1
+*
+* R9 MONO CARD VERTICAL RESAMPLER
+* 28 X 7 SOURCE ROWS -> 26 X 7 OUTPUT ROWS.
+* KEEP FIRST/LAST SOURCE ROW; DISTRIBUTE 14 SINGLE-ROW SKIPS.
+*
+SR08A LDA COLORPR
+ BNE SR08D
+ LDA SIDE
+ CMP #02
+ BEQ SR08D
+ LDA ROWCNT
+ CMP #15
+ BEQ SR08S
+ LSR
+ BCS SR08D
+SR08S LDA SIDE
+ BNE SR08M
+ LDA BADDR
+ CLC
+ ADC #$40
+ STA BADDR
+ BCC SR08D
+ INC BADDR+1
+ BNE SR08D
+SR08M LDA BADDR
+ SEC
+ SBC #$40
+ STA BADDR
+ BCS SR08D
+ DEC BADDR+1
+SR08D DEC ROWCNT
+ BNE SR09
+ RTS"""
+
 
 def patch_gcdraw(text: str) -> str:
-    return replace_once(
+    patched = replace_once(
         text,
         GCDRAW_DUMP_OLD,
         GCDRAW_DUMP_NEW,
         "GCDRAW.S first-row/piece boundary block",
+    )
+    patched = replace_once(
+        patched,
+        GCDRAW_ROWCOUNT_OLD,
+        GCDRAW_ROWCOUNT_NEW,
+        "GCDRAW.S monochrome card row-count block",
+    )
+    return replace_once(
+        patched,
+        GCDRAW_STEP_OLD,
+        GCDRAW_STEP_NEW,
+        "GCDRAW.S monochrome card row-resample step",
     )
 
 def sha256_text(text: str) -> str:
@@ -549,10 +627,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R8 PRCOMS core: R7 continuous graphics, no ESC % 9")
-    print("  R8 GCDRAW: enter graphics before each DUMP first row")
-    print("  R8 first outside-card row: print at physical head position")
-    print("  R8 later piece boundaries: native $03 $0E row feed")
+    print("  R9 PRCOMS core: proven R7/R8 continuous graphics")
+    print("  R9 GCDRAW: R8 first-row/piece-boundary behavior retained")
+    print("  R9 mono card: 28 source bands resampled to 26 output bands")
+    print("  R9 resampler: 14 single source-row skips preserve first/last row")
     print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
