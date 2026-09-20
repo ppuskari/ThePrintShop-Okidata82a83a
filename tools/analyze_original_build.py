@@ -46,6 +46,20 @@ def main() -> int:
             print(text[:20000])
             print()
 
+    print("=== SCRATCH SYMBOL REFERENCES ===")
+    for symbol in ("FIX80", "GCINDEX", "GCOLD"):
+        print(f"--- {symbol} ---")
+        for d, img in enumerate(images, 1):
+            for e in catalog(img):
+                if not e["name"].upper().endswith(".S"):
+                    continue
+                txt = decode(file_sectors(img, e))
+                for n, line in enumerate(txt.splitlines(), 1):
+                    if re.search(rf"\\b{symbol}\\b", line, re.I):
+                        print(f"D{d} {e['name']}:{n}: {line}")
+        print()
+    print()
+
     print("=== TARGET PRINT LOOPS ===")
     for disk_index, name, lo, hi in (
         (1, "GCDRAW.S", 1370, 1505),
