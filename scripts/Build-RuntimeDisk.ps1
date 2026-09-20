@@ -79,7 +79,9 @@ try {
             "PRCOMS.ORIG.BUILD.S",
             "PRCOMS.OKI.BUILD.S",
             "MENUS7.ORIG.BUILD.S",
-            "MENUS7.OKI.BUILD.S"
+            "MENUS7.OKI.BUILD.S",
+            "GCDRAW.ORIG.BUILD.S",
+            "GCDRAW.OKI.BUILD.S"
         )) {
             Write-Host "  $Source"
             & $MerlinExe $Source
@@ -101,6 +103,7 @@ try {
     $Runtime = Join-Path $OutPath "PrintShop-Okidata82a83a-OkiGraphI.dsk"
     $Prcoms = Join-Path $OutPath "PRCOMS.OKI"
     $Menus7 = Join-Path $OutPath "MENUS7.OKI"
+    $Gcdraw = Join-Path $OutPath "GCDRAW.OKI"
 
     Write-Host ""
     Write-Host "Constructing runnable Print Shop DOS disk..."
@@ -108,6 +111,7 @@ try {
         "tools\build_runtime_disk.py",
         "--prcoms", $Prcoms,
         "--menus7", $Menus7,
+        "--gcdraw", $Gcdraw,
         "--output", $Runtime
     )
     if ($BaseDisk) {
