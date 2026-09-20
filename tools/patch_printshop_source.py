@@ -103,72 +103,44 @@ CRLF2 LDA #$0A
  BPL CRLF2
  BMI CRLFX
 *
-* OKIGRAPH I TYPE-5 CR/LF - R3
-* Text CR/LF skips the legacy ML92/93 ESC % 9 n sequence.
-* GC5 has already exited graphics before CRLF is called.
+* OKIGRAPH I TYPE-5 CR/LF - R4
 *
-* Y=0 is still a mandatory carriage return.  R2 accidentally
-* emitted nothing here, allowing the next raster row to begin
-* from the previous right-edge carriage position.
+* Print Shop treats X as a persistent spacing value in 1/72 inch
+* and Y as the number of line advances.  The ML92/93 ESC % 9 n
+* command sets persistent spacing, but the 82A/83A OkiGraph I ROM
+* uses ESC % 9 n as an immediate n/144-inch vertical motion.
 *
-* For Y>0, explicitly enter graphics first, then issue the
-* native $03,$0E graphics LF+CR command while already in
-* graphics state.  Exit once all requested feeds are complete.
+* Emulate Print Shop semantics locally:
+*   X != 0 : remember 2*X in FIX80, but do not feed
+*   Y times: issue ESC % 9 FIX80 as a direct feed
 *
-CRLF5 LDA FIX80
- BNE CRLF5G
- LDA #$0D
+* A CR is still mandatory for every CRLF call, including Y=0.
+*
+CRLF5 LDA #$0D
  JSR COUT1
- DEY
- BMI CRLFX
-CRLF5T LDA #$0A
- JSR COUT1
- DEY
- BPL CRLF5T
- BMI CRLFX
-CRLF5G LDA #00
+ CPX #00
+ BEQ CRLF5F
+ TXA
+ ASL
  STA FIX80
- DEY
- BMI CRLF5C
- LDA #03
+CRLF5F DEY
+ BMI CRLFX
+CRLF5L JSR ESCOUT
+ LDA #$25
  JSR COUT1
-CRLF5L LDA #03
+ LDA #$39
  JSR COUT1
- LDA #$0E
+ LDA FIX80
  JSR COUT1
  DEY
  BPL CRLF5L
- LDA #03
- JSR COUT1
- LDA #02
- JSR COUT1
- JMP CRLFX
-CRLF5C LDA #$0D
- JSR COUT1
- JMP CRLFX
+ BMI CRLFX
 CRLFX TXA
  PHA
  JSR UPLRK
  PLA
  TAX
 SETLFX RTS"""
-
-GC5_END_OLD = re.compile(
-    r"(?m)^[ \t]+LDA #03\n"
-    r"[ \t]+JSR COUT1\n"
-    r"[ \t]+LDA #02\n"
-    r"[ \t]+JSR COUT1\n"
-    r"^GC5X PLA$"
-)
-
-GC5_END_NEW = """ LDA #03
- JSR COUT1
- LDA #02
- JSR COUT1
- LDA #01
- STA FIX80
-GC5X PLA"""
-
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
@@ -250,14 +222,7 @@ def patch_prcoms(text: str) -> str:
     patched = CRLF_OLD.sub(CRLF_NEW, text, count=1)
     patched = GC5_OLD.sub(GC5_NEW, patched, count=1)
 
-    end_matches = list(GC5_END_OLD.finditer(patched))
-    if len(end_matches) != 1:
-        raise RuntimeError(
-            "PRCOMS.S GC5 termination: expected exactly one block, "
-            f"found {len(end_matches)}"
-        )
-
-    return GC5_END_OLD.sub(GC5_END_NEW, patched, count=1)
+    return patched
 
 
 def patch_menus(text: str) -> str:
@@ -374,7 +339,7 @@ def write_patched_disks(
     if (
         " ORA #$80\n" not in rt1
         or GC5_OLD.search(rt1)
-        or "CRLF5G LDA #00\n" not in rt1
+        or "CRLF5L JSR ESCOUT\n" not in rt1
     ):
         raise RuntimeError("generated source disk 1 does not contain the OkiGraph GC5 patch")
     if NEW_MENU not in rt2 or OLD_MENU in rt2:
@@ -420,9 +385,9 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R3 control path: type-5 CRLF bypasses ESC % 9 n")
-    print("  R3 Y=0: mandatory carriage return preserved")
-    print("  R3 graphics advance: $03 enter, $03 $0E feed(s), $03 $02 exit")
+    print("  R4 type-5 spacing: cache 2*X in 1/144-inch units")
+    print("  R4 feed: each Y emits direct ESC % 9 cached-spacing motion")
+    print("  R4 Y=0: mandatory carriage return, no vertical motion")
     print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
