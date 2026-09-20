@@ -216,15 +216,13 @@ COUTRAW STX XTEMP
 COUT1A LDX PITYPE
 """
 
-SETLF5_OLD = re.compile(
-    r"(?m)^SETLF5 LDA #'%'\\n"
-    r"[ \\t]*JSR COUT1\\n"
-    r"[ \\t]*LDA #'9'\\n"
-    r"[ \\t]*JSR COUT1\\n"
-    r"[ \\t]*TXA\\n"
-    r"[ \\t]*ASL\\n"
-    r"[ \\t]*JMP COUT1$"
-)
+SETLF5_OLD = """SETLF5 LDA #'%'
+ JSR COUT1
+ LDA #'9'
+ JSR COUT1
+ TXA
+ ASL
+ JMP COUT1"""
 SETLF5_NEW = """SETLF5 LDA #$25
  JSR COUT1
  LDA #$39
@@ -342,11 +340,11 @@ def patch_prcoms(text: str) -> str:
             f"found {len(cout1_matches)}"
         )
 
-    setlf5_matches = list(SETLF5_OLD.finditer(text))
-    if len(setlf5_matches) != 1:
+    setlf5_count = text.count(SETLF5_OLD)
+    if setlf5_count != 1:
         raise RuntimeError(
             "PRCOMS.S SETLF5 block: expected exactly one original block, "
-            f"found {len(setlf5_matches)}"
+            f"found {setlf5_count}"
         )
 
     patched = CRLF_OLD.sub(CRLF_NEW, text, count=1)
@@ -354,7 +352,7 @@ def patch_prcoms(text: str) -> str:
     patched = GC5_OLD.sub(GC5_NEW, patched, count=1)
     patched = GC5_END_OLD.sub(GC5_END_NEW, patched, count=1)
     patched = COUT1_OLD.sub(COUT1_NEW, patched, count=1)
-    patched = SETLF5_OLD.sub(SETLF5_NEW, patched, count=1)
+    patched = patched.replace(SETLF5_OLD, SETLF5_NEW, 1)
 
     return patched
 
