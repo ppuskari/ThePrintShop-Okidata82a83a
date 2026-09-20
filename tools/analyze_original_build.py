@@ -275,6 +275,23 @@ def main() -> int:
             break
     print()
 
+    print("=== REVTBL DEFINITIONS / REFERENCES ===")
+    for d, img in enumerate(images, 1):
+        for e in catalog(img):
+            if not e["name"].upper().endswith(".S"):
+                continue
+            txt = decode(file_sectors(img, e))
+            lines = txt.splitlines()
+            for i, line in enumerate(lines):
+                if "REVTBL" in line.upper():
+                    lo = max(0, i - 6)
+                    hi = min(len(lines), i + 20)
+                    print("D{} {} line {}".format(d, e["name"], i + 1))
+                    for j in range(lo, hi):
+                        print(f"{j + 1:5d}: {lines[j]}")
+                    print()
+    print()
+
     print("=== GCDRAW SYMBOLS 1-110 ===")
     gcs = get_file(images[1], "GCDRAW.S").splitlines()
     for j in range(0, min(110, len(gcs))):
