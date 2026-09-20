@@ -205,10 +205,10 @@ def main() -> int:
     plines = prcoms.splitlines()
     for label in ("THINKING", "PRINTING", "PAUSING"):
         for i, line in enumerate(plines):
-            if re.match(rf"^${label}\\b", line, re.I):
+            if re.match(rf"^{label}\\b", line, re.I):
                 lo = max(0, i - 10)
                 hi = min(len(plines), i + 55)
-                print(f"--- {${label}} at PRCOMS.S line {i + 1} ---")
+                print(f"--- {label} at PRCOMS.S line {i + 1} ---")
                 for j in range(lo, hi):
                     print(f"{j + 1:5d}: {plines[j]}")
                 print()
@@ -217,7 +217,7 @@ def main() -> int:
 
     print("=== THINKING/PRINTING CALL SITES ===")
     for symbol in ("THINKING", "PRINTING", "PAUSING"):
-        print(f"--- {${symbol}} ---")
+        print(f"--- {symbol} ---")
         for d, img in enumerate(images, 1):
             for e in catalog(img):
                 if not e["name"].upper().endswith(".S"):
@@ -225,7 +225,7 @@ def main() -> int:
                 txt = decode(file_sectors(img, e))
                 lines = txt.splitlines()
                 for i, line in enumerate(lines):
-                    if re.search(rf"\\b(JSR|JMP)\\s+{${symbol}}\\b", line, re.I):
+                    if re.search(rf"\\b(JSR|JMP)\\s+{symbol}\\b", line, re.I):
                         lo = max(0, i - 8)
                         hi = min(len(lines), i + 12)
                         print("D{} {} line {}".format(d, e["name"], i + 1))
