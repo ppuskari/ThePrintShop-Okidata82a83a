@@ -1,48 +1,42 @@
 * THE PRINT SHOP V2 - OKIDATA 82A/83A OKIGRAPH I
 *
-* R9A HARDWARE-VALIDATION BUILD
+* R11 HORIZONTAL BYTE-STREAM TEST
 *
-* R9 (SHA256 29d2...) is retired.  It clobbered A/SIDE while checking PRTYPE
-* inside GCDRAW, causing DUMP1 to select the wrong card-buffer base and decode
-* unrelated memory as printer raster data.
+* R11 preserves the R10 DRAW1 geometry and registration behavior.  Only the
+* type-5 graphics-byte wire encoding changes.
 *
-* R9A keeps the exact validated R8 PRCOMS and MENUS7 binaries and changes only
-* GCDRAW/DRAW1.
+* Historical type-5 behavior:
 *
-* R9A vertical correction:
+*   logical = reverse7(source0 | source1)
 *
-*   Print Shop nominal band pitch = 14/144 inch
-*   OkiGraph native graphics feed = 15/144 inch
+* The original driver emits that seven-bit value directly.  ETX ($03) is the
+* OkiGraph command prefix, so a literal graphics value $03 is escaped by
+* sending it twice:
 *
-* A monochrome greeting-card side historically contains 28 seven-row source
-* bands (196 source rows).  R9A emits 26 bands while distributing fourteen
-* single-row skips through the source walk.  The first source row and final
-* source row remain represented.
+*   $03 -> $03,$03
 *
-* MAKEBUF proves one source scanline is $40 bytes:
+* Earlier builds instead forced bit 7:
 *
-*   DADDR += $40 for each of the seven rows decoded into one printer band.
+*   wire = $80 | logical
 *
-* Therefore R9A advances BADDR by either:
+* That is retired for this test.  If the OkiGraph parser masks or otherwise
+* treats graphics data as seven-bit, $83 can still collide with ETX and consume
+* following bytes as control, producing exactly the observed left-to-right
+* shortening and missing right-edge columns.
 *
-*   +$01C0 / -$01C0   normal seven-row source step
-*   +$0200 / -$0200   eight-row step (skip one source row)
+* R11 therefore restores the original Oki type-5 escape semantics:
 *
-* The printer-type test uses Y:
+*   normal logical byte -> one seven-bit data byte
+*   logical $03         -> $03,$03
 *
-*   LDY $95F1
-*   CPY #05
+* Pairing remains:
 *
-* so A remains the SIDE value required by DUMP1's subsequent CMP #01.
+*   two Print Shop 120-cpi source columns -> one Oki 60-cpi logical column
 *
-* R8 behavior retained:
-*   - first outside-card raster starts at the physical head baseline;
-*   - later DUMP boundaries use one native graphics feed;
-*   - continuous graphics uses $03,$0E;
-*   - legacy ML92/93 ESC '%' '9' is never emitted;
-*   - LF36 remains suppressed.
+* SENDGC counts, R9A vertical resampling, and R10 per-band hard carriage home
+* are otherwise unchanged.
 *
-* Validated R9A overlays:
-*   PRCOMS.OKI  2034 bytes
+* Validated R11 overlays:
+*   PRCOMS.OKI  2039 bytes
 *   MENUS7.OKI  3018 bytes
-*   GCDRAW.OKI  2802 bytes (runtime DRAW1)
+*   GCDRAW.OKI  2807 bytes
