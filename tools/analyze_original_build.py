@@ -185,6 +185,13 @@ def main() -> int:
                     print()
     print()
 
+    print("=== PRCOMS TOP / COUT1 LAYOUT ===")
+    prcoms = get_file(images[0], "PRCOMS.S")
+    plines = prcoms.splitlines()
+    for j in range(0, min(150, len(plines))):
+        print(f"{j + 1:5d}: {plines[j]}")
+    print()
+
     print("=== PRCOMS CONTROL-PATH REFERENCES ===")
     prcoms = get_file(images[0], "PRCOMS.S")
     for n, line in enumerate(prcoms.splitlines(), 1):
