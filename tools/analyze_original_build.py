@@ -200,6 +200,13 @@ def main() -> int:
                     print()
     print()
 
+    print("=== GCDRAW DUMP OCCURRENCES ===")
+    gdump_scan = get_file(images[1], "GCDRAW.S")
+    for n, line in enumerate(gdump_scan.splitlines(), 1):
+        if "DUMP" in line.upper():
+            print(f"{n:5d}: {line}")
+    print()
+
     print("=== GCDRAW DUMP ROUTINE ===")
     gdump = get_file(images[1], "GCDRAW.S").splitlines()
     for i, line in enumerate(gdump):
