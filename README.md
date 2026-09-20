@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R3 executable disk build: implemented and CI-validated; physical printer validation is next.**
+**R4 executable disk build: implemented and CI-validated; physical printer validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -64,30 +64,26 @@ It creates:
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 ```
 
-Current R3 validated image:
+Current R4 validated image:
 
 ```
 size   143360 bytes
-SHA256 a50158701b931c3cc555ef261790f350aa6678b784cd39b9afaa76bd68856c8f
+SHA256 65b6f911c1c20787ead87c64eceaf08a9caef5a903885b6c65b54978abb9b984
 ```
 
-R1 proved the raster encoding but exposed the incompatible ML92/93 spacing
-sequence. R2 was rejected on hardware: it accidentally suppressed the
-mandatory carriage return when Print Shop requested CRLF with Y=0, and it
-issued `$03 $0E` before actually re-entering OkiGraph graphics state. On the
-wide-carriage printer this allowed subsequent raster rows to begin from the
-previous right-edge carriage position.
+R1 proved the raster encoding but exposed the ML92/93 spacing mismatch. R2
+lost the mandatory Y=0 carriage return and was rejected on hardware. R3 fixed
+carriage return and stopped the wide-platen runaway, but its fixed native
+graphics feed advances 15/144 inch per seven-dot band while Print Shop
+explicitly requests 7/72 inch = 14/144 inch.
 
-R3 keeps the proven raster conversion, removes the legacy `ESC % 9 n`
-sequence, restores the Y=0 carriage return, and for graphics feeds emits:
-
-```
-$03                  enter graphics
-($03 $0E) * Y        native graphics LF + CR
-$03 $02              exit graphics
-```
-
-That keeps `$03 $0E` in its validated graphics-state context.
+Source call-site analysis shows the normal graphics loop first calls CRLF with
+X=7,Y=0 to establish spacing, then uses X=0,Y=1 for each band. The OkiGraph I
+ROM's ESC % 9 n path schedules direct n/144-inch vertical motion instead of
+storing the persistent spacing semantics assumed by the original ML92/93
+driver. R4 therefore caches 2*X in the driver and uses one direct ESC % 9 n
+motion for each requested Y advance. Normal graphics bands now request exactly
+14/144 inch and no ordinary LF is emitted.
 
 The script uses an installed Merlin32 if available; otherwise it downloads
 the pinned v1.1.10 Windows build. It verifies the original runtime overlays
@@ -175,7 +171,7 @@ https://github.com/ppuskari/Okidata-Microline-82A-83A
 
 ## Next milestone
 
-Validate the R3 disk on the physical 82A/83A. The specific targets are removal
+Validate the R4 disk on the physical 82A/83A. The specific targets are removal
 of the stray control/text output at graphics transitions, elimination of the
 extra vertical gap between seven-dot bands, and restoration of one-page layout.
 
