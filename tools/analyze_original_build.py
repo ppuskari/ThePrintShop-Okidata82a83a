@@ -275,6 +275,12 @@ def main() -> int:
             break
     print()
 
+    print("=== GCDRAW REVCHK / RASTER OUTPUT 1415-1610 ===")
+    gcr = get_file(images[1], "GCDRAW.S").splitlines()
+    for j in range(1414, min(1610, len(gcr))):
+        print(f"{j + 1:5d}: {gcr[j]}")
+    print()
+
     print("=== GCDRAW MAKEBUF 1510-1575 ===")
     gcmb = get_file(images[1], "GCDRAW.S").splitlines()
     for j in range(1509, min(1575, len(gcmb))):
