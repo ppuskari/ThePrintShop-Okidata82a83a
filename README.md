@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R12 executable disk build: implemented and CI-validated; hardware validation is next.**
+**R13 executable disk build: implemented and CI-validated; hardware validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,42 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R13 first-pane top alignment
+
+R13 keeps the hardware-good R11 OkiGraph driver and the R12 common startup
+`LF36` removal unchanged.  Hardware testing of R12 showed one remaining
+full first-row feed before the physically first greeting-card pane when the
+paper top is aligned with the top print-head pin.
+
+The first inside-card pass satisfies `PIECE + YMAX = 392` for both
+monochrome and color, so R13 uses that geometry to suppress only that first
+`ROW` CRLF while `CREDBUF-1` is still in its initial state.  The existing
+outside-card first-row suppression, all later raster-row feeds, fold spacing,
+and inter-piece positioning remain unchanged.
+
+Validated R13 runtime image:
+
+```
+size   143360 bytes
+SHA256 3eef3ef4660483bce6681f939fc3f1409ac533319efc9d332407e0c57c152bc1
+```
+
+Validated R13 overlays:
+
+```
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+
+GCDRAW.OKI -> runtime DRAW1
+length 2812
+SHA256 2c37296b3e8d4bdad9170c0b56be91cc29925a9089e975d406efb2e9643e8bf9
+```
 
 ## R12 common startup-feed cleanup
 
@@ -133,11 +169,11 @@ It creates:
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 ```
 
-Current R12 validated image:
+Current R13 validated image:
 
 ```
 size   143360 bytes
-SHA256 4259a5e98464f32e1aec691ae3365d21e471ceb585a12ee5ec54be4b8175ac0d
+SHA256 3eef3ef4660483bce6681f939fc3f1409ac533319efc9d332407e0c57c152bc1
 ```
 
 R6 was physically validated and was the closest result yet: the total vertical
