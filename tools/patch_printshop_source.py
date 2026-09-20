@@ -253,8 +253,11 @@ GCDRAW_DUMP_NEW = """DUMP2 STX BADDR
  LDX #00
  LDY #00
  JSR SENDGC
- LDA SIDE
- BNE ROW
+ NOP
+ NOP
+ NOP
+ NOP
+ NOP
  LDA CREDBUF-1
  CMP #01
  BNE ROW
@@ -698,10 +701,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R12 OkiGraph driver: exact hardware-good R11 PRCOMS behavior")
-    print("  R12 base GCDRAW: suppress initial common LF36 for all printers")
-    print("  R12 startup: retain only the drawing path's first-row feed")
-    print("  R12 end/fold LF36 calls: unchanged")
+    print("  R13 OkiGraph driver: exact hardware-good R11 PRCOMS behavior")
+    print("  R13 base GCDRAW: retain R12 initial LF36 suppression")
+    print("  R13 first raster row: suppress one-time ROW LF regardless of SIDE")
+    print("  R13 later rows/fold/inter-piece positioning: unchanged")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
