@@ -46,6 +46,23 @@ def main() -> int:
             print(text[:20000])
             print()
 
+    print("=== SENDGC CALL SITES ACROSS SOURCE TREE ===")
+    for d, img in enumerate(images, 1):
+        for e in catalog(img):
+            if not e["name"].upper().endswith(".S"):
+                continue
+            text = decode(file_sectors(img, e))
+            lines = text.splitlines()
+            for i, line in enumerate(lines):
+                if re.search(r"\bJSR\s+SENDGC\b", line, re.I):
+                    lo = max(0, i - 14)
+                    hi = min(len(lines), i + 24)
+                    print(f"--- D{d} {e['name']} line {i + 1} ---")
+                    for j in range(lo, hi):
+                        print(f"{j + 1:5d}: {lines[j]}")
+                    print()
+    print()
+
     print("=== CRLF CALL SITES ACROSS SOURCE TREE ===")
     for d, img in enumerate(images, 1):
         for e in catalog(img):
