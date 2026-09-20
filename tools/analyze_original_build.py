@@ -412,6 +412,16 @@ def main() -> int:
                 break
     print()
 
+    print("=== GCDRAW DRAW ENTRY 110-175 ===")
+    for d, img in enumerate(images, 1):
+        for e in catalog(img):
+            if e["name"].upper() == "GCDRAW.S":
+                lines = decode(file_sectors(img, e)).splitlines()
+                for j in range(109, min(len(lines),175)):
+                    print(f"{j+1:5d}: {lines[j]}")
+                print()
+    print()
+
     print("=== GCDRAW FIRST-ROW STATE / CREDBUF / SIDE ===")
     for d, img in enumerate(images, 1):
         for e in catalog(img):
