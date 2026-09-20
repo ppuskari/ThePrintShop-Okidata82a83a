@@ -10,6 +10,7 @@ import re
 from patch_printshop_source import (
     binary_source_text,
     load_image,
+    patch_gcdraw,
     patch_menus,
     patch_prcoms,
 )
@@ -52,14 +53,18 @@ def main() -> int:
     d2 = load_image(None, 1)
     prcoms_orig = binary_source_text(d1, "PRCOMS.S")
     menus7_orig = binary_source_text(d2, "MENUS7.S")
+    gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
+    gcdraw_oki = patch_gcdraw(gcdraw_orig)
 
     products = {
         "PRCOMS.ORIG.BUILD.S": add_sav(prcoms_orig, "PRCOMS.ORIG"),
         "PRCOMS.OKI.BUILD.S": add_sav(prcoms_oki, "PRCOMS.OKI"),
         "MENUS7.ORIG.BUILD.S": add_sav(menus7_orig, "MENUS7.ORIG"),
         "MENUS7.OKI.BUILD.S": add_sav(menus7_oki, "MENUS7.OKI"),
+        "GCDRAW.ORIG.BUILD.S": add_sav(gcdraw_orig, "GCDRAW.ORIG"),
+        "GCDRAW.OKI.BUILD.S": add_sav(gcdraw_oki, "GCDRAW.OKI"),
     }
 
     for name, text in products.items():
