@@ -88,7 +88,7 @@ def main() -> int:
     print("=== ZERO-PAGE B9/BC ALIASES ===")
     for addr in ("B9", "BC"):
         print(f"--- ${addr} ---")
-        pat = re.compile(rf"\\bEQU\\s+\\$?{addr}\\b", re.I)
+        pat = re.compile(rf"\bEQU\s+\$?{addr}\b", re.I)
         for d, img in enumerate(images, 1):
             for e in catalog(img):
                 if not e["name"].upper().endswith(".S"):
