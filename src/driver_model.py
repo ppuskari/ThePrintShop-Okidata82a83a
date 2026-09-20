@@ -2,7 +2,7 @@
 
 ETX = 0x03
 EXIT_GRAPHICS = 0x02
-GRAPHICS_LF_CR = 0x0E
+ESC = 0x1B
 
 
 def reverse7(value: int) -> int:
@@ -36,27 +36,39 @@ def graphics_record(source: bytes) -> bytes:
     return bytes([ETX]) + encode_columns(source) + bytes([ETX, EXIT_GRAPHICS])
 
 
-def text_crlf(count: int) -> bytes:
-    """R3 type-5 text CR/LF: no legacy ESC % 9 spacing sequence."""
-    if count < 0:
-        raise ValueError("count must be non-negative")
-    return bytes([0x0D]) + bytes([0x0A]) * count
+def update_spacing_72(current_144: int, x_72: int) -> int:
+    """Emulate Print Shop SETLF state for OkiGraph I.
 
-
-def graphics_crlf(count: int) -> bytes:
-    """R3 vertical move after a completed Print Shop graphics transaction.
-
-    GC5 has already emitted ETX,EXIT_GRAPHICS.  A zero-count CRLF must still
-    return the carriage.  For one or more vertical moves, enter graphics,
-    issue native ETX,GRAPHICS_LF_CR commands while in graphics state, then
-    exit graphics once at the end.
+    Print Shop supplies X in 1/72-inch units and expects X=0 to retain the
+    previous spacing.  OkiGraph I's ESC % 9 n performs direct n/144-inch
+    motion rather than storing persistent spacing, so the driver caches
+    2*X itself.
     """
-    if count < 0:
-        raise ValueError("count must be non-negative")
-    if count == 0:
-        return bytes([0x0D])
-    return (
-        bytes([ETX])
-        + bytes([ETX, GRAPHICS_LF_CR]) * count
-        + bytes([ETX, EXIT_GRAPHICS])
-    )
+    if not 0 <= current_144 <= 0x7F:
+        raise ValueError("current spacing must fit n/144 command")
+    if not 0 <= x_72 <= 63:
+        raise ValueError("X must fit doubled n/144 command")
+    return current_144 if x_72 == 0 else x_72 * 2
+
+
+def direct_feed_144(amount_144: int) -> bytes:
+    """Return one OkiGraph direct n/144-inch vertical-motion command."""
+    if not 0 <= amount_144 <= 0x7F:
+        raise ValueError("amount must fit OkiGraph n/144 command")
+    return bytes([ESC, ord("%"), ord("9"), amount_144])
+
+
+def type5_crlf(current_144: int, x_72: int, y_count: int) -> tuple[bytes, int]:
+    """Model R4 Print Shop type-5 CRLF semantics.
+
+    Every call returns the carriage first.  Non-zero X updates the cached
+    spacing.  Each of Y requested advances is then executed directly with
+    ESC % 9 n using that cached 1/144-inch amount; no ordinary LF is sent.
+    """
+    if y_count < 0:
+        raise ValueError("Y must be non-negative")
+    spacing = update_spacing_72(current_144, x_72)
+    stream = bytearray([0x0D])
+    for _ in range(y_count):
+        stream += direct_feed_144(spacing)
+    return bytes(stream), spacing
