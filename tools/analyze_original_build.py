@@ -46,6 +46,16 @@ def main() -> int:
             print(text[:20000])
             print()
 
+    print("=== PRCOMS SETLF5 SOURCE ===")
+    pr = get_file(images[0], "PRCOMS.S")
+    prlines = pr.splitlines()
+    for i, line in enumerate(prlines):
+        if line.startswith("SETLF5"):
+            for j in range(max(0, i - 2), min(len(prlines), i + 12)):
+                print(f"{j + 1:5d}: {prlines[j]!r}")
+            break
+    print()
+
     print("=== PRCOMS ZERO-PAGE DEFINITIONS ===")
     prcoms_head = get_file(images[0], "PRCOMS.S")
     for n, line in enumerate(prcoms_head.splitlines()[:45], 1):
