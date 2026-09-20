@@ -307,6 +307,20 @@ SR08A DEC ROWCNT
  BNE SR09
  RTS"""
 
+GCDRAW_SENDGC_OLD = """ LDX #00
+ LDY SIDE
+ LDA GCNUMH,Y
+ TAY
+ JSR SENDGC"""
+
+GCDRAW_SENDGC_NEW = """ LDX #00
+ LDY SIDE
+ LDA GCNUMH,Y
+ TAY
+ LDA #$0D
+ JSR COUT1
+ JSR SENDGC"""
+
 GCDRAW_HELPER_OLD = """ BCS SR02
 *
 GCNUMH HEX 040204"""
@@ -352,6 +366,12 @@ def patch_gcdraw(text: str) -> str:
         GCDRAW_ROWCOUNT_OLD,
         GCDRAW_ROWCOUNT_NEW,
         "GCDRAW.S type-5 card row count",
+    )
+    patched = replace_once(
+        patched,
+        GCDRAW_SENDGC_OLD,
+        GCDRAW_SENDGC_NEW,
+        "GCDRAW.S hard carriage home before raster row",
     )
     patched = replace_once(
         patched,
@@ -656,10 +676,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R9A PRCOMS/MENUS7: exact validated R8 binaries")
-    print("  R9A GCDRAW: R8 DUMP boundary behavior retained")
-    print("  R9A mono type-5 card: 28 source bands -> 26 output bands")
-    print("  R9A SIDE register preserved while checking printer type")
+    print("  R10 PRCOMS/MENUS7: exact validated R8/R9A binaries")
+    print("  R10 vertical resampler: exact R9A geometry retained")
+    print("  R10 horizontal registration: text-mode CR before each raster SENDGC")
+    print("  R10 CR is carriage-only: no added line feed")
     print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
