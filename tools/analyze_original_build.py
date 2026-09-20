@@ -200,6 +200,12 @@ def main() -> int:
                     print()
     print()
 
+    print("=== PRCOMS STATUS ROUTINES 1045-1150 ===")
+    prcoms_status = get_file(images[0], "PRCOMS.S").splitlines()
+    for j in range(1044, min(1150, len(prcoms_status))):
+        print(f"{j + 1:5d}: {prcoms_status[j]}")
+    print()
+
     print("=== PRCOMS STATUS SYMBOL OCCURRENCES ===")
     prcoms_scan = get_file(images[0], "PRCOMS.S")
     for n, line in enumerate(prcoms_scan.splitlines(), 1):
