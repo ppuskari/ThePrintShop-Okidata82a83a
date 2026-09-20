@@ -96,22 +96,18 @@ CRLF_NEW = """CRLF LDA PRTYPE
  JSR COUT1
  JSR SETLF
  DEY
- BPL CRLF2
- JMP CRLFX
+ BMI CRLFX
 CRLF2 LDA #$0A
  JSR COUT1
  DEY
  BPL CRLF2
- JMP CRLFX
+ BMI CRLFX
 *
-* OKIGRAPH I TYPE-5 CR/LF - R8
-* FIX80: 0=text, 1=graphics, 2=first-row prime,
-*        3=continuation-row prime.
+* OKIGRAPH I TYPE-5 CR/LF - R8 PRCOMS CORE
+* Continuous graphics from R7; DUMP boundary handling is in GCDRAW.
 *
 CRLF5 LDA FIX80
  BEQ CRLF5T
- CMP #01
- BNE CRLF5P
  CPX #00
  BNE CRLF5E
  CPY #00
@@ -127,46 +123,17 @@ CRLF5E LDA #03
  JSR COUTRAW
  LDA #02
  JSR COUTRAW
- LDA #00
- STA FIX80
- CPX #07
- BNE CRLF5T
- LDA #03
- STA FIX80
- BNE CRLF5R
-CRLF5T CPX #07
- BNE CRLF5R
- LDA #02
- STA FIX80
-CRLF5R LDA #$0D
+ DEC FIX80
+CRLF5T LDA #$0D
  JSR COUTRAW
  DEY
- BPL CRLF5D
- JMP CRLFX
-CRLF5D CPX #02
+ BMI CRLFX
+ CPX #02
  BEQ CRLFX
- LDA FIX80
- CMP #02
- BCS CRLF5P
 CRLF5L LDA #$0A
  JSR COUTRAW
  DEY
  BPL CRLF5L
- BMI CRLFX
-CRLF5P PHA
- LDA #00
- STA FIX80
- LDA #$0D
- JSR COUTRAW
- JSR SGC5
- PLA
- CMP #02
- BEQ CRLFX
- LDA #03
- JSR COUTRAW
- LDA #$0E
- JSR COUTRAW
- JMP CRLFX
 CRLFX TXA
  PHA
  JSR UPLRK
@@ -249,6 +216,48 @@ MENUS_INIT_NEW = """ JSR GSELECT
  STA $B9
  LDA RETFLAG"""
 
+
+
+GCDRAW_DUMP_OLD = """DUMP2 STX BADDR
+ STY BADDR+1
+ LDX #07
+ LDY #00
+ JSR CRLF
+*
+ROW LDX #00
+ LDY #01
+ JSR CRLF
+ LDA COLORPR"""
+
+GCDRAW_DUMP_NEW = """DUMP2 STX BADDR
+ STY BADDR+1
+ LDX #07
+ LDY #00
+ JSR CRLF
+ LDX #00
+ LDY #00
+ JSR SENDGC
+ LDA SIDE
+ BNE ROW
+ LDA CREDBUF-1
+ CMP #01
+ BNE ROW
+ INC CREDBUF-1
+ JMP ROW0
+*
+ROW LDX #00
+ LDY #01
+ JSR CRLF
+ROW0 LDA COLORPR"""
+
+
+def patch_gcdraw(text: str) -> str:
+    return replace_once(
+        text,
+        GCDRAW_DUMP_OLD,
+        GCDRAW_DUMP_NEW,
+        "GCDRAW.S first-row/piece boundary block",
+    )
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
@@ -524,11 +533,14 @@ def main() -> int:
 
     prcoms_info = binary_source_info(disk1, "PRCOMS.S")
     menus7_info = binary_source_info(disk2, "MENUS7.S")
+    gcdraw_info = binary_source_info(disk2, "GCDRAW.S")
     prcoms = prcoms_info["text"]
     menus7 = menus7_info["text"]
+    gcdraw = gcdraw_info["text"]
 
     patched_prcoms = patch_prcoms(prcoms)
     patched_menus7 = patch_menus(menus7)
+    patched_gcdraw = patch_gcdraw(gcdraw)
 
     # These are the two invariants that keep the first hardware build
     # deliberately low-risk.
@@ -537,10 +549,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R8 state: 0=text,1=graphics,2=first prime,3=continuation prime")
-    print("  R8 first DUMP row: no vertical feed before first raster")
-    print("  R8 later DUMP rows: one native $03 $0E feed at piece boundary")
-    print("  R8 LF36 remains suppressed; legacy ESC % 9 remains unused")
+    print("  R8 PRCOMS core: R7 continuous graphics, no ESC % 9")
+    print("  R8 GCDRAW: enter graphics before each DUMP first row")
+    print("  R8 first outside-card row: print at physical head position")
+    print("  R8 later piece boundaries: native $03 $0E row feed")
     print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
@@ -549,6 +561,8 @@ def main() -> int:
     print(f"  PRCOMS decoded SHA256 after : {sha256_text(patched_prcoms)}")
     print(f"  MENUS7 decoded SHA256 before: {sha256_text(menus7)}")
     print(f"  MENUS7 decoded SHA256 after : {sha256_text(patched_menus7)}")
+    print(f"  GCDRAW decoded SHA256 before: {sha256_text(gcdraw)}")
+    print(f"  GCDRAW decoded SHA256 after : {sha256_text(patched_gcdraw)}")
 
     if args.output_dir:
         args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -557,6 +571,9 @@ def main() -> int:
         )
         (args.output_dir / "MENUS7.OKI.S").write_text(
             patched_menus7, encoding="ascii", newline="\n"
+        )
+        (args.output_dir / "GCDRAW.OKI.S").write_text(
+            patched_gcdraw, encoding="ascii", newline="\n"
         )
         print(f"  wrote decoded patched source to: {args.output_dir}")
 
