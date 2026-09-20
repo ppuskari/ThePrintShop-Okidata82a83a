@@ -46,6 +46,12 @@ def main() -> int:
             print(text[:20000])
             print()
 
+    print("=== PRCOMS ZERO-PAGE DEFINITIONS ===")
+    prcoms_head = get_file(images[0], "PRCOMS.S")
+    for n, line in enumerate(prcoms_head.splitlines()[:45], 1):
+        print(f"{n:5d}: {line}")
+    print()
+
     print("=== MENUS7 ENTRY REGION ===")
     menus7 = get_file(images[1], "MENUS7.S")
     for n, line in enumerate(menus7.splitlines()[:190], 1):
