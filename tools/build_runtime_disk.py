@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Build a runnable Print Shop OkiGraph I runtime disk.
 
-The base image is the DOS 3.4 Color Print Shop runtime whose PRCOMS and
-MENUS7 binaries exactly match the 1987-01-26 source snapshot when assembled
-with Merlin32.
+The base image is the DOS 3.4 Color Print Shop runtime whose PRCOMS,
+MENUS7, and DRAW1 (GCDRAW.S) binaries exactly match the 1987-01-26 source
+snapshot when assembled with Merlin32.
 
 This tool does not redistribute the base disk.  It either reads --base-disk
-or downloads the known archive image, verifies the two original overlays
+or downloads the known archive image, verifies the original overlays
 byte-for-byte, then rewrites those files in place through their existing
 DOS T/S chains.
 
@@ -39,6 +39,11 @@ EXPECTED_ORIGINAL = {
     "MENUS7": {
         "length": 3014,
         "sha256": "86d7fa76bfd693d461aa9085e3612253837e7f5f02a6027581beef3284c5355f",
+    },
+    "DRAW1": {
+        "load": 0x7800,
+        "length": 2737,
+        "sha256": "cfa548eb4f950156c14639372f2681edbaa810e86f0945d73c24e0304e436353",
     },
 }
 
@@ -153,6 +158,12 @@ def main() -> int:
     )
     ap.add_argument("--prcoms", type=pathlib.Path, required=True)
     ap.add_argument("--menus7", type=pathlib.Path, required=True)
+    ap.add_argument(
+        "--gcdraw",
+        type=pathlib.Path,
+        required=True,
+        help="compiled GCDRAW.OKI payload; installed as runtime DRAW1",
+    )
     ap.add_argument("--output", type=pathlib.Path, required=True)
     args = ap.parse_args()
 
@@ -163,7 +174,7 @@ def main() -> int:
         )
 
     entries = {e["name"].upper(): e for e in catalog(img)}
-    for required in ("PRCOMS", "MENUS7"):
+    for required in ("PRCOMS", "MENUS7", "DRAW1"):
         if required not in entries:
             raise RuntimeError(f"base disk is missing required file {required}")
 
@@ -172,6 +183,7 @@ def main() -> int:
 
     prcoms = args.prcoms.read_bytes()
     menus7 = args.menus7.read_bytes()
+    gcdraw = args.gcdraw.read_bytes()
 
     print(
         f"  input PRCOMS len={len(prcoms)} sha256={sha256(prcoms)}"
@@ -179,13 +191,20 @@ def main() -> int:
     print(
         f"  input MENUS7 len={len(menus7)} sha256={sha256(menus7)}"
     )
+    print(
+        f"  input GCDRAW/DRAW1 len={len(gcdraw)} sha256={sha256(gcdraw)}"
+    )
 
     print("Rewriting executable overlays in place...")
     img = rewrite_dos_binary(img, "PRCOMS", prcoms)
     img = rewrite_dos_binary(img, "MENUS7", menus7)
+    img = rewrite_dos_binary(img, "DRAW1", gcdraw)
 
     print("Reading patched overlays back through DOS T/S chains...")
-    verify_patched(img, {"PRCOMS": prcoms, "MENUS7": menus7})
+    verify_patched(
+        img,
+        {"PRCOMS": prcoms, "MENUS7": menus7, "DRAW1": gcdraw},
+    )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(img)
