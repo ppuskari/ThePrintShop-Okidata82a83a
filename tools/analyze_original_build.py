@@ -200,6 +200,12 @@ def main() -> int:
                     print()
     print()
 
+    print("=== GCDRAW DUMP RANGE 1335-1510 ===")
+    gdump_range = get_file(images[1], "GCDRAW.S").splitlines()
+    for j in range(1334, min(1510, len(gdump_range))):
+        print(f"{j + 1:5d}: {gdump_range[j]}")
+    print()
+
     print("=== GCDRAW DUMP OCCURRENCES ===")
     gdump_scan = get_file(images[1], "GCDRAW.S")
     for n, line in enumerate(gdump_scan.splitlines(), 1):
