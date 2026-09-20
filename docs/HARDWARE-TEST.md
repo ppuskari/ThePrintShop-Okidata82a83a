@@ -1,143 +1,141 @@
 # Hardware validation plan
 
-## R9 target
+## Target
 
 - Apple II / IIe-class Print Shop v2 environment
-- Okidata MICROLINE 82A or 83A with validated OkiGraph I ROMs
-- current repository R9 runtime disk
-- normal Apple II printer interface path; R8 does not change the interface-card
-  layer
+- Okidata MICROLINE 82A with physically validated OkiGraph I ROM set
+- Okidata MICROLINE 83A with physically validated OkiGraph I ROM set
+- whichever Apple II printer interface is actually connected; the v0.1
+  driver does not alter Print Shop's interface-card layer
 
-Build:
+## Prepare the runnable disk
+
+From the repository root:
 
 ```powershell
 .\scripts\Build-RuntimeDisk.ps1
 ```
 
-Expected image:
+Use this image for emulator and physical-machine testing:
 
 ```
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
-143360 bytes
-SHA256 29d2eae0d4f0eb3c221be125fc705b2cbcbcbef104fabefb990b3525a642d08d
 ```
 
-## Gate 1 - top-of-page first raster
-
-Physically place the desired top graphics pin at the intended top raster
-baseline before starting the Print Shop output.
-
-R8/R9 are specifically designed so the first outside-card DUMP does **not**
-advance the paper before its first raster row.
-
-Confirm:
-
-- no startup LF before the first graphics row;
-- no visible `%9` or other control-string garbage;
-- the first border/raster begins at the physical baseline selected by the
-  operator.
-
-## Gate 2 - THINKING -> PRINTING piece boundary
-
-Use the same Season's Greetings card used for R7.
-
-R7 showed a repeatable small vertical discontinuity when the application
-changed from THINKING back to PRINTING. The screen routines themselves do not
-touch the printer; source tracing located the boundary inside GCDRAW/DRAW1.
-
-R9 should produce one native graphics feed at later DUMP starts, exactly like
-ordinary in-piece band stepping.
-
-Confirm whether the repeated micro-gap:
-
-- disappears;
-- remains but changes size; or
-- moves to a different boundary.
-
-A photograph that includes the whole sheet plus a close-up of the discontinuity
-is useful.
-
-## Gate 3 - vertical scale
-
-Do not use or test `ESC % 9 n`: physical R6 testing already showed that this
-legacy ML92/93 sequence is not valid on the 82A/83A OkiGraph-I path and can
-print literal command bytes.
-
-Measure from the first raster baseline to the corresponding expected endpoint.
-
-Known pitch mismatch:
+The current validated build is 143,360 bytes with SHA-256:
 
 ```
-Print Shop nominal band = 14/144 inch
-OkiGraph native feed    = 15/144 inch
-ratio                   = 15/14 = 1.071428...
+947e0929d894d6cc47aad760098c4b92e49b5796d939795b2a29f8a58e49d2f8
 ```
 
-Therefore about 7.1% vertical stretch is expected even when all accidental
-extra feeds are gone. Record the actual measured error; that measurement will
-drive a later source-row resampling build.
+The build performs an untouched control assembly before constructing the
+runtime. It verifies that the base disk's `PRCOMS` and `MENUS7` are exact
+matches for those control binaries, then installs the OkiGraph versions at
+their original load addresses (`$1800` and `$6300`) without reallocating
+their DOS files.
 
-## Gate 4 - persistent raster/motif defect
+The older source-only workflow remains available through
+`scripts\Build-DriverSource.ps1`, but those source disks are development
+inputs rather than the executable hardware-test artifact.
 
-Inspect the known problem areas from R7:
+## Gate 1 - direct line-spacing behavior
 
-- the right end of the upper border where several lower motif halves disappear;
-- the corresponding lower/right border region;
-- the localized line/column corruption in the card quadrants.
+Before spending time on a full Print Shop print, verify the retained Okidata
+type-5 spacing command on the 82A/83A OkiGraph I ROM:
 
-GCDRAW source tracing has already ruled out two simple causes for this card:
+```
+ESC % 9 $0E
+LF
+```
 
-- SENDGC counts are fixed and even (`$0200`/`$0400`);
-- the defect is not caused by trailing-blank trimming.
+`$0E = 14/144 inch = 7/72 inch`, which is a common Print Shop seven-row
+advance request.
 
-If R8 changes these defects, the cause was tied to the DUMP graphics-state
-boundary. If they remain identical, the next investigation should focus on
-the forward/reverse raster loops, RHALF blank insertion, and exact wire bytes
-around the affected columns.
+Confirm that the paper advance is repeatable and that the command does not
+print visible garbage or disturb graphics state.
+
+Also exercise at least:
+
+- `n=$04` (2/72 inch)
+- `n=$0E` (7/72 inch)
+- `n=$18` (12/72 inch)
+
+If this gate fails, stop there; the raster conversion can remain unchanged
+and the next build will replace only the type-5 CR/LF implementation.
+
+## Gate 2 - command/data collision pattern
+
+Print a pattern that deliberately generates the old raw graphics value
+`$03`.
+
+The model test uses a source pair whose merged seven-bit value is `$60`.
+After Print Shop's seven-bit reversal, the legacy driver would have produced
+`$03`.  v0.1 must place `$83` on the wire instead.
+
+Expected result:
+
+- no unexpected exit from graphics mode;
+- no command execution in the middle of a row;
+- no missing or shifted columns.
+
+## Gate 3 - simple graphics
+
+Use a simple Print Shop item with:
+
+- a solid vertical edge;
+- alternating one-column detail;
+- blank areas;
+- a diagonal; and
+- a filled region.
+
+Check for:
+
+- correct top-to-bottom pin orientation;
+- no seven-bit inversion;
+- no doubled/missing horizontal columns;
+- clean return to text/control mode after each graphics row.
+
+## Gate 4 - dimensional check
+
+OkiGraph I is a 60-column/inch graphics path.
+
+For the 82A, the reconstructed native line capacity is 480 graphics columns
+(8.0 inches).  For the 83A it is 792 columns (13.2 inches).
+
+Print Shop itself may choose a narrower design area, so this gate is about
+scale rather than forcing the application to consume the entire carriage.
+
+Measure a known-width graphic.  Two Print Shop 120-cpi source columns should
+collapse into one 60-cpi Oki column.
 
 ## Gate 5 - application coverage
 
-After greeting-card output is stable, exercise:
+After a basic card/sign succeeds, exercise at least one output from each
+major path:
 
 - Sign
+- Greeting Card
 - Letterhead
 - Banner
 
-Those paths share PRCOMS but do not all use the newly patched greeting-card
-DRAW1/GCDRAW boundary logic, so they are useful controls.
+The original source routes these through the same `SENDGC`, `GCOUT1`,
+and `CRLF` abstraction, but this catches assumptions in individual drawing
+modules.
 
-## Capture with each run
+## What to capture from the first run
 
-Record:
+For each printer:
 
-- exact disk SHA256;
-- 82A or 83A;
-- OkiGraph ROM revision/set;
-- Apple II model and printer interface;
-- physical top-of-page alignment;
-- first-raster startup movement;
-- location/size of any THINKING -> PRINTING micro-gap;
-- total measured vertical size/error;
-- close-up of the missing motif region; and
-- any carriage-position or graphics-state anomaly.
+- 82A or 83A
+- OkiGraph I ROM set/revision
+- Apple II model
+- printer interface card and slot
+- Print Shop build/source snapshot
+- pass/fail for spacing gate
+- photograph or scan of the test pattern
+- measured horizontal width
+- measured vertical band spacing
+- any point where graphics unexpectedly returns to text mode
 
-
-## R9 vertical resampling gate
-
-For the monochrome type-5 greeting-card path, R9 changes each historical
-28-band piece into 26 output bands. Fourteen individual source rows are
-skipped in a distributed pattern; no complete seven-row source band is
-discarded.
-
-Check:
-
-- total card height compared with the R8 sheet;
-- top and bottom border alignment on 8.5 x 11 paper;
-- whether the fold-over gap remains correct;
-- whether any new horizontal discontinuity appears at the distributed
-  single-row resample points;
-- whether the existing right-edge missing-motif and localized raster defects
-  change or remain identical.
-
-The expected geometric change from R8 is approximately 14/15 in the
-card-piece vertical dimension. The first and final source rows are preserved.
+Those observations will decide whether v0.2 is simply the separate type-10
+UI integration or whether CR/LF needs an 82A/83A-specific implementation.
