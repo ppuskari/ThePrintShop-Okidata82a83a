@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R5 executable disk build: implemented and CI-validated; physical printer validation is next.**
+**R6 executable disk build: implemented and CI-validated; physical printer validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -64,40 +64,38 @@ It creates:
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 ```
 
-Current R5 validated image:
+Current R6 validated image:
 
 ```
 size   143360 bytes
-SHA256 58a1242a3aa420ecb97768265b74c8774f935cc1e8ce3cd01b7739164a367f05
+SHA256 09122e40e8baead48a86d35f348532e6298efa0a1f573f68eb5f4b89b62913e0
 ```
 
-R3 proved the carriage-return repair but still showed separated seven-dot
-bands. R4's attempted `ESC % 9 n` spacing adaptation produced essentially the
-same hardware output and is retired; that command is not part of the
-firmware-backed OkiGraph-I graphics protocol used by this project.
+R5 was the closest hardware result yet: continuous OkiGraph state across normal
+seven-dot bands made most border motifs contiguous and stopped the runaway
+carriage behavior. The remaining sheet showed stale control bytes before the
+welcome text, incomplete right-edge motifs/corruption, and excessive spacing
+at the card/page-half reposition.
 
-Source tracing shows that Print Shop calls CRLF before each seven-line band
-and then invokes SENDGC. R5 therefore keeps OkiGraph graphics state active
-across ordinary `X=0,Y>0` band advances. Those advances now use native
-`$03 $0E` while the printer is already in graphics mode. SGC5 enters graphics
-only once for the run, and GC5 no longer exits after every individual chunk.
+R6 keeps the R5 continuous-graphics band path but adds deterministic state
+initialization when printer type 5 is selected. It also caches Print Shop's
+requested X spacing in 1/144-inch units and uses `ESC % 9 n` as the direct
+vertical movement for text/boundary reposition calls, with no extra LF.
+Normal in-graphics row advances remain native `$03 $0E`.
 
-For safety, any spacing/boundary CRLF, CR-only request, or ordinary COUT1
-output automatically emits `$03 $02` first. This is specifically intended to
-preserve the correct carriage reset before the left/right-half positioning
-logic that previously sent the head toward the wide-carriage margin.
-
-Validated R5 overlay:
+Validated R6 overlays:
 
 ```
 PRCOMS.OKI
-length 2044
-SHA256 df0940bc2826bf2161ca08a3e004b1d1d49a3d8b661f8423e8d5f97fc8288ad1
+length 2042
+SHA256 d1cd460b9d8a6660395ed868e72c830437c3fe8e4a4a96ed63977e394ec07c90
+
+MENUS7.OKI
+length 3022
+SHA256 6c35e2f9b1771c35a41f5686e1079d32f08d70bd75470f7f565c96c5fddb8bf8
 ```
 
-R5 exactly fills the existing 2044-byte PRCOMS DOS payload allocation without
-changing its load address or T/S allocation.
-
+PRCOMS remains entirely below the Apple II $2000 boundary.
 
 The script uses an installed Merlin32 if available; otherwise it downloads
 the pinned v1.1.10 Windows build. It verifies the original runtime overlays
@@ -185,7 +183,7 @@ https://github.com/ppuskari/Okidata-Microline-82A-83A
 
 ## Next milestone
 
-Validate the R5 disk on the physical 82A/83A. The specific targets are removal
+Validate the R6 disk on the physical 82A/83A. The specific targets are removal
 of the stray control/text output at graphics transitions, elimination of the
 extra vertical gap between seven-dot bands, and restoration of one-page layout.
 
