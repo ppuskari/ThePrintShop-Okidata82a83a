@@ -15,17 +15,31 @@ def reverse7(value: int) -> int:
 
 
 def encode_pair(first: int, second: int) -> int:
+    """Logical 7-pin OkiGraph data column before wire escaping."""
     merged = (first | second) & 0x7F
-    return 0x80 | reverse7(merged)
+    return reverse7(merged)
+
+
+def escape_graphics_byte(value: int) -> bytes:
+    """Encode one logical OkiGraph graphics column on the wire.
+
+    ETX ($03) is the graphics command prefix. The historical type-5 driver
+    escapes a literal graphics value $03 by sending it twice.
+    """
+    value &= 0x7F
+    if value == 0x03:
+        return b"\x03\x03"
+    return bytes([value])
 
 
 def encode_columns(source: bytes) -> bytes:
+    """Return the escaped wire stream for paired Print Shop source columns."""
     if len(source) & 1:
         raise ValueError("Print Shop/Oki type-5 conversion requires byte pairs")
-    return bytes(
-        encode_pair(source[i], source[i + 1])
-        for i in range(0, len(source), 2)
-    )
+    out = bytearray()
+    for i in range(0, len(source), 2):
+        out += escape_graphics_byte(encode_pair(source[i], source[i + 1]))
+    return bytes(out)
 
 
 def sendgc_begin(in_graphics: bool) -> tuple[bytes, bool]:
