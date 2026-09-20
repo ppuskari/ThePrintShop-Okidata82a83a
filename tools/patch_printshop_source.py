@@ -220,6 +220,20 @@ MENUS_INIT_NEW = """ JSR GSELECT
 
 
 
+GCDRAW_START_OLD = """ LDA A2
+ STA $60D1
+ JSR LF36
+ LDX #00
+ STX RETFLAG"""
+
+GCDRAW_START_NEW = """ LDA A2
+ STA $60D1
+ NOP
+ NOP
+ NOP
+ LDX #00
+ STX RETFLAG"""
+
 GCDRAW_DUMP_OLD = """DUMP2 STX BADDR
  STY BADDR+1
  LDX #07
@@ -359,6 +373,12 @@ GCNUMH HEX 040204"""
 def patch_gcdraw(text: str) -> str:
     patched = replace_once(
         text,
+        GCDRAW_START_OLD,
+        GCDRAW_START_NEW,
+        "GCDRAW.S common startup LF36 suppression",
+    )
+    patched = replace_once(
+        patched,
         GCDRAW_DUMP_OLD,
         GCDRAW_DUMP_NEW,
         "GCDRAW.S first-row/piece boundary block",
@@ -678,11 +698,11 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R11 vertical/horizontal geometry: exact R10 DRAW1 behavior retained")
-    print("  R11 type-5 graphics data: raw reverse7(pair OR), no forced bit 7")
-    print("  R11 literal $03 graphics byte: escaped as $03,$03")
-    print("  R11 hypothesis: prevent command-parser column loss mid-row")
-    print("  graphics data: original Oki type-5 $03 escape semantics")
+    print("  R12 OkiGraph driver: exact hardware-good R11 PRCOMS behavior")
+    print("  R12 base GCDRAW: suppress initial common LF36 for all printers")
+    print("  R12 startup: retain only the drawing path's first-row feed")
+    print("  R12 end/fold LF36 calls: unchanged")
+    print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
     print(f"  MENUS7 source high-bit ratio: {menus7_info['high_ratio']:.3f}")
