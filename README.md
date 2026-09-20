@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R9 executable disk build: implemented and CI-validated; physical printer validation is next.**
+**R7 executable disk build: implemented and CI-validated; physical printer validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -49,11 +49,8 @@ Merlin32. An untouched control build was compared against the archived
 
 - `PRCOMS`: 1,962 bytes, exact byte-for-byte match, load address `$1800`
 - `MENUS7`: 3,014 bytes, exact byte-for-byte match, load address `$6300`
-- `DRAW1`: 2,737 bytes, exact byte-for-byte match to historical
-  `GCDRAW.S`, load address `$7800`
 
-That establishes a compatible runtime base and proves the source-to-runtime
-alias `GCDRAW.S -> DRAW1`.
+That establishes a compatible runtime base for this source snapshot.
 
 To build the actual runnable disk on Windows:
 
@@ -67,30 +64,31 @@ It creates:
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 ```
 
-Current R9 validated image:
+Current R7 validated image:
 
 ```
 size   143360 bytes
-SHA256 29d2eae0d4f0eb3c221be125fc705b2cbcbcbef104fabefb990b3525a642d08d
+SHA256 9767fdfaffdf0bc2ca960f418c5178a84f00bdd8ebdd8fc5a53f293f9a6e8945
 ```
 
-R8 removed the repeatable first-row/piece-boundary feed and left the remaining
-vertical error almost entirely systematic. Hardware measurement matched the
-known pitch ratio: Print Shop assumes 14/144 inch between seven-row bands,
-while the firmware-backed OkiGraph feed is 15/144 inch.
+R6 was physically validated and was the closest result yet: the total vertical
+size was within roughly half an inch, but literal control-sequence fragments
+still appeared at the start/midpoint/end, several border motifs lost their
+lower portion near the right edge, and two card quadrants showed localized
+raster corruption.
 
-For a monochrome greeting-card piece, R8 still emits 28 seven-row bands.
-R9 changes only type-5 card sides 0/1 to 26 output bands and resamples the
-original 196 source rows into 182 emitted rows. Rather than deleting two whole
-seven-row bands, the resampler distributes fourteen single source-row skips
-through the piece. Source row 0 is preserved, and the final output band starts
-at source row 189 so source row 195 is preserved as well.
+The R6 sheet proved that the inherited ML92/93 `ESC % 9 n` sequence must not
+be used on this OkiGraph-I path. R7 removes it completely and returns to the
+hardware-proven R5 continuous-graphics core. Type-5 state is initialized when
+the printer is selected. Normal in-graphics rows remain `$03 $0E`; X=12
+boundary motion uses ordinary 1/6-inch LF; and Print Shop's X=2 LF36 helper is
+suppressed rather than being incorrectly expanded to a full LF.
 
-The resampler is gated by the shared printer-type byte at `$95F1`, so other
-Print Shop printer types retain their historical row count and stepping.
-Full-page signs (`SIDE=2`) also retain their historical geometry.
+Greeting-card source tracing also confirmed that GCDRAW uses fixed even
+`SENDGC` sizes (`$0200`/`$0400`), so the observed right-edge card defect
+is not caused by variable blank trimming or an odd transaction count.
 
-Validated R9 overlays:
+Validated R7 overlays:
 
 ```
 PRCOMS.OKI
@@ -100,18 +98,15 @@ SHA256 a960e7c6a92003f4a7cc42dda5db75b433d75abb4adfb30d40bc30c156f68124
 MENUS7.OKI
 length 3018
 SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
-
-GCDRAW.OKI -> runtime DRAW1
-length 2809
-SHA256 f7691ec32ee74a4ad02a4ac2af9e10d56fa6a2bfd5d33ff24e26641e7dcabf6f
 ```
 
-R9 DRAW1 still fits the original DOS allocation and remains below the
-application data beginning at `$8300`.
+PRCOMS remains entirely below the Apple II `$2000` boundary.
 
 The script uses an installed Merlin32 if available; otherwise it downloads
 the pinned v1.1.10 Windows build. It verifies the original runtime overlays
-against the control build before changing the disk, then rewrites only `PRCOMS`, `MENUS7`, and verified runtime `DRAW1/GCDRAW` through their existing DOS T/S chains and verifies all three files after read-back.
+against the control build before changing the disk, then rewrites only
+`PRCOMS` and `MENUS7` through their existing DOS T/S chains and verifies
+both files after read-back.
 
 See [`docs/EXECUTABLE-BUILD.md`](docs/EXECUTABLE-BUILD.md) for the complete
 reproducibility and validation record.
@@ -172,7 +167,7 @@ GitHub Actions currently verifies:
 - `tools/patch_printshop_source.py` — source transformation
 - `tools/prepare_merlin32_build.py` — Big Mac-to-Merlin32 build preparation
 - `tools/validate_overlay_build.py` — control/patched executable verification
-- `tools/build_runtime_disk.py` — verified executable disk construction, including GCDRAW -> DRAW1
+- `tools/build_runtime_disk.py` — verified executable disk construction
 - `tools/inspect_printshop_source.py` — reproducible historical-source scanner
 - `tests/test_driver_model.py` — regression tests
 - `docs/DESIGN.md` — source/driver architecture and design decisions
@@ -193,12 +188,10 @@ https://github.com/ppuskari/Okidata-Microline-82A-83A
 
 ## Next milestone
 
-Validate R9 on the physical 82A/83A with the head aligned to the intended
-top-of-page raster baseline. Confirm that the first graphics row no longer
-advances the paper and that the repeatable THINKING -> PRINTING piece-boundary
-micro-step is gone. Then measure the remaining vertical scale error and inspect
-whether the persistent right-edge motif/raster corruption changed.
+Validate the R7 disk on the physical 82A/83A. The specific targets are removal
+of the stray control/text output at graphics transitions, elimination of the
+extra vertical gap between seven-dot bands, and restoration of one-page layout.
 
-After the boundary behavior is isolated, the next likely vertical-scale step
-is source-row resampling to compensate for the proven 15/144-inch native
-OkiGraph feed versus Print Shop's nominal 14/144-inch band pitch.
+If R3 validates the corrected carriage-return and native graphics-feed path,
+the next source build can preserve the original 92/93 driver as type 5 and add
+**82A/83A OkiGraph I as a distinct printer type 10**.
