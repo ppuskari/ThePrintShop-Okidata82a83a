@@ -46,6 +46,20 @@ def main() -> int:
             print(text[:20000])
             print()
 
+    print("=== TARGET PRINT LOOPS ===")
+    for disk_index, name, lo, hi in (
+        (1, "GCDRAW.S", 1370, 1505),
+        (2, "SMMENU2.S", 215, 310),
+        (2, "LHDRAW.S", 665, 755),
+    ):
+        text = get_file(images[disk_index], name)
+        lines = text.splitlines()
+        print(f"--- D{disk_index + 1} {name} {lo}-{hi} ---")
+        for j in range(lo - 1, min(hi, len(lines))):
+            print(f"{j + 1:5d}: {lines[j]}")
+        print()
+    print()
+
     print("=== SENDGC CALL SITES ACROSS SOURCE TREE ===")
     for d, img in enumerate(images, 1):
         for e in catalog(img):
