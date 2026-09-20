@@ -113,6 +113,19 @@ def main() -> int:
         print()
     print()
 
+    print("=== GCDRAW CRLF CONTEXTS ===")
+    text = get_file(images[1], "GCDRAW.S")
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if re.search(r"\b(JSR|JMP)\s+CRLF\b", line, re.I):
+            lo = max(0, i - 14)
+            hi = min(len(lines), i + 14)
+            print(f"--- GCDRAW.S line {i + 1} ---")
+            for j in range(lo, hi):
+                print(f"{j + 1:5d}: {lines[j]}")
+            print()
+    print()
+
     print("=== SENDGC CALL SITES ACROSS SOURCE TREE ===")
     for d, img in enumerate(images, 1):
         for e in catalog(img):
