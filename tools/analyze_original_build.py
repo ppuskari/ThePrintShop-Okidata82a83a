@@ -200,6 +200,17 @@ def main() -> int:
                     print()
     print()
 
+    print("=== GCDRAW DUMP ROUTINE ===")
+    gdump = get_file(images[1], "GCDRAW.S").splitlines()
+    for i, line in enumerate(gdump):
+        if re.match(r"^DUMP\\b", line, re.I):
+            lo = max(0, i - 25)
+            hi = min(len(gdump), i + 180)
+            for j in range(lo, hi):
+                print(f"{j + 1:5d}: {gdump[j]}")
+            break
+    print()
+
     print("=== GCDRAW STATUS/PRINT CONTROL 220-330 ===")
     gcstat = get_file(images[1], "GCDRAW.S").splitlines()
     for j in range(219, min(330, len(gcstat))):
