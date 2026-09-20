@@ -101,30 +101,21 @@ CRLF2 LDA #$0A
  JSR COUT1
  DEY
  BPL CRLF2
- BMI CRLFX
 *
 * OKIGRAPH I TYPE-5 CR/LF - R6
 *
-* FIX80 is graphics state: 0=text, 1=graphics.
-* QL caches Print Shop X spacing as 2*X in 1/144-inch units.
+* FIX80: 0=text, 1=graphics.
+* QL: cached Print Shop spacing, 2*X in 1/144-inch units.
 *
-* While graphics is active, the normal X=0,Y>0 band advance
-* remains native ETX,$0E and stays in graphics.
-*
-* At a spacing/boundary change, exit graphics, return carriage,
-* and use ESC % 9 QL as the direct vertical motion.  Do NOT add
-* a normal LF after that command.
-*
-CRLF5 CPX #00
+CRLF5 TXA
  BEQ CRLF5S
- TXA
  ASL
  STA QL
 CRLF5S LDA FIX80
  BEQ CRLF5T
- CPX #00
+ TXA
  BNE CRLF5E
- CPY #00
+ TYA
  BEQ CRLF5E
 CRLF5G LDA #03
  JSR COUTRAW
@@ -133,26 +124,15 @@ CRLF5G LDA #03
  DEY
  BNE CRLF5G
  JMP CRLFX
-CRLF5E LDA #03
- JSR COUTRAW
- LDA #02
- JSR COUTRAW
- DEC FIX80
+CRLF5E JSR GEXIT
 CRLF5T LDA #$0D
  JSR COUTRAW
  DEY
  BMI CRLFX
- LDA QL
- BEQ CRLF5L
 CRLF5D JSR ESCOUT
  JSR SETLF5
  DEY
  BPL CRLF5D
- BMI CRLFX
-CRLF5L LDA #$0A
- JSR COUTRAW
- DEY
- BPL CRLF5L
 CRLFX TXA
  PHA
  JSR UPLRK
@@ -198,17 +178,20 @@ COUT1_OLD = re.compile(
     r"^COUT1A LDX PITYPE\n"
 )
 
-COUT1_NEW = """COUT1 PHA
+COUT1_NEW = """GEXIT LDA #03
+ JSR COUTRAW
+ LDA #02
+ JSR COUTRAW
+ DEC FIX80
+ RTS
+*
+COUT1 PHA
  LDA PRTYPE
  CMP #05
  BNE COUT1N
  LDA FIX80
  BEQ COUT1N
- LDA #03
- JSR COUTRAW
- LDA #02
- JSR COUTRAW
- DEC FIX80
+ JSR GEXIT
 COUT1N PLA
 COUTRAW STX XTEMP
  STY YTEMP
@@ -238,6 +221,7 @@ MENUS_INIT_NEW = """ JSR GSELECT
  STA PRTYPE
  LDA #00
  STA $B9
+ LDA #$18
  STA $BC
  LDA RETFLAG"""
 
@@ -485,6 +469,7 @@ def write_patched_disks(
         NEW_MENU not in rt2
         or OLD_MENU in rt2
         or " STA $B9\n" not in rt2
+        or " LDA #$18\n" not in rt2
         or " STA $BC\n" not in rt2
     ):
         raise RuntimeError(
