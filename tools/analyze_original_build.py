@@ -46,6 +46,12 @@ def main() -> int:
             print(text[:20000])
             print()
 
+    print("=== MENUS7 ENTRY REGION ===")
+    menus7 = get_file(images[1], "MENUS7.S")
+    for n, line in enumerate(menus7.splitlines()[:190], 1):
+        print(f"{n:5d}: {line}")
+    print()
+
     print("=== PRTYPE WRITE SITES ===")
     for d, img in enumerate(images, 1):
         for e in catalog(img):
