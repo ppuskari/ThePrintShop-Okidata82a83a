@@ -398,6 +398,20 @@ def main() -> int:
                     print("D{} {}:{}: {}".format(d, e["name"], n, line))
     print()
 
+    print("=== PRCOMS SENDGC/GCOUT1 TYPE-5 PATH ===")
+    pr = get_file(images[0], "PRCOMS.S").splitlines()
+    for label in ("SENDGC", "SGC5", "GCOUT1", "GC5", "SENDGB"):
+        for i, line in enumerate(pr):
+            if re.match(rf"^{label}\\b", line, re.I):
+                lo = max(0, i - 8)
+                hi = min(len(pr), i + 90)
+                print(f"--- {label} at PRCOMS.S line {i + 1} ---")
+                for j in range(lo, hi):
+                    print(f"{j + 1:5d}: {pr[j]}")
+                print()
+                break
+    print()
+
     print("=== PRCOMS CONTROL-PATH REFERENCES ===")
     prcoms = get_file(images[0], "PRCOMS.S")
     for n, line in enumerate(prcoms.splitlines(), 1):
