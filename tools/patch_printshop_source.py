@@ -67,7 +67,7 @@ GC5_NEW = """GC5A PLA
  JSR REVBITS
  ORA #$80
  LDX XTEMP
- JSR COUT1
+ JSR COUTRAW
 GC5B PHA"""
 
 
@@ -103,44 +103,105 @@ CRLF2 LDA #$0A
  BPL CRLF2
  BMI CRLFX
 *
-* OKIGRAPH I TYPE-5 CR/LF - R4
+* OKIGRAPH I TYPE-5 CR/LF - R5
 *
-* Print Shop treats X as a persistent spacing value in 1/72 inch
-* and Y as the number of line advances.  The ML92/93 ESC % 9 n
-* command sets persistent spacing, but the 82A/83A OkiGraph I ROM
-* uses ESC % 9 n as an immediate n/144-inch vertical motion.
+* FIX80 is type-5 graphics-state: 0=text, 1=graphics.
+* Keep graphics active across the normal X=0,Y>0 row advance
+* and use native ETX,$0E while already in graphics state.
+* Any spacing/boundary change (X!=0) or CR-only call exits
+* graphics first and then performs text-mode CR/LF.
 *
-* Emulate Print Shop semantics locally:
-*   X != 0 : remember 2*X in FIX80, but do not feed
-*   Y times: issue ESC % 9 FIX80 as a direct feed
-*
-* A CR is still mandatory for every CRLF call, including Y=0.
-*
-CRLF5 LDA #$0D
- JSR COUT1
+CRLF5 LDA FIX80
+ BEQ CRLF5T
  CPX #00
- BEQ CRLF5F
- TXA
- ASL
+ BNE CRLF5E
+ CPY #00
+ BEQ CRLF5E
+CRLF5G LDA #03
+ JSR COUTRAW
+ LDA #$0E
+ JSR COUTRAW
+ DEY
+ BNE CRLF5G
+ JMP CRLFX
+CRLF5E LDA #03
+ JSR COUTRAW
+ LDA #02
+ JSR COUTRAW
+ LDA #00
  STA FIX80
-CRLF5F DEY
+CRLF5T LDA #$0D
+ JSR COUTRAW
+ DEY
  BMI CRLFX
-CRLF5L JSR ESCOUT
- LDA #$25
- JSR COUT1
- LDA #$39
- JSR COUT1
- LDA FIX80
- JSR COUT1
+CRLF5L LDA #$0A
+ JSR COUTRAW
  DEY
  BPL CRLF5L
- BMI CRLFX
 CRLFX TXA
  PHA
  JSR UPLRK
  PLA
  TAX
 SETLFX RTS"""
+
+
+SGC5_OLD = re.compile(
+    r"(?m)^SGC5 STX TEMPLO\n"
+    r"[ \t]+STY TEMPHI\n"
+    r"[ \t]+LDA #00\n"
+    r"[ \t]+STA GCINDEX\n"
+    r"[ \t]+LDA #03\n"
+    r"[ \t]+JMP COUT1$"
+)
+
+SGC5_NEW = """SGC5 STX TEMPLO
+ STY TEMPHI
+ LDA #00
+ STA GCINDEX
+ LDA FIX80
+ BNE SGC5X
+ LDA #01
+ STA FIX80
+ LDA #03
+ JMP COUTRAW
+SGC5X RTS"""
+
+GC5_END_OLD = re.compile(
+    r"(?m)^[ \t]+LDA #03\n"
+    r"[ \t]+JSR COUT1\n"
+    r"[ \t]+LDA #02\n"
+    r"[ \t]+JSR COUT1\n"
+    r"^GC5X PLA$"
+)
+
+GC5_END_NEW = """GC5X PLA"""
+
+COUT1_OLD = re.compile(
+    r"(?m)^COUT1 STX XTEMP\n"
+    r"[ \t]+STY YTEMP\n"
+    r"[ \t]+PHA\n"
+    r"^COUT1A LDX PITYPE\n"
+)
+
+COUT1_NEW = """COUT1 PHA
+ LDA PRTYPE
+ CMP #05
+ BNE COUT1N
+ LDA FIX80
+ BEQ COUT1N
+ LDA #03
+ JSR COUTRAW
+ LDA #02
+ JSR COUTRAW
+ LDA #00
+ STA FIX80
+COUT1N PLA
+COUTRAW STX XTEMP
+ STY YTEMP
+ PHA
+COUT1A LDX PITYPE
+"""
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
@@ -219,8 +280,32 @@ def patch_prcoms(text: str) -> str:
             f"found {len(crlf_matches)}"
         )
 
+    sgc5_matches = list(SGC5_OLD.finditer(text))
+    if len(sgc5_matches) != 1:
+        raise RuntimeError(
+            "PRCOMS.S SGC5 block: expected exactly one original block, "
+            f"found {len(sgc5_matches)}"
+        )
+
+    gc5_end_matches = list(GC5_END_OLD.finditer(text))
+    if len(gc5_end_matches) != 1:
+        raise RuntimeError(
+            "PRCOMS.S GC5 end block: expected exactly one original block, "
+            f"found {len(gc5_end_matches)}"
+        )
+
+    cout1_matches = list(COUT1_OLD.finditer(text))
+    if len(cout1_matches) != 1:
+        raise RuntimeError(
+            "PRCOMS.S COUT1 block: expected exactly one original block, "
+            f"found {len(cout1_matches)}"
+        )
+
     patched = CRLF_OLD.sub(CRLF_NEW, text, count=1)
+    patched = SGC5_OLD.sub(SGC5_NEW, patched, count=1)
     patched = GC5_OLD.sub(GC5_NEW, patched, count=1)
+    patched = GC5_END_OLD.sub(GC5_END_NEW, patched, count=1)
+    patched = COUT1_OLD.sub(COUT1_NEW, patched, count=1)
 
     return patched
 
@@ -339,7 +424,7 @@ def write_patched_disks(
     if (
         " ORA #$80\n" not in rt1
         or GC5_OLD.search(rt1)
-        or "CRLF5L JSR ESCOUT\n" not in rt1
+        or "COUTRAW STX XTEMP\n" not in rt1
     ):
         raise RuntimeError("generated source disk 1 does not contain the OkiGraph GC5 patch")
     if NEW_MENU not in rt2 or OLD_MENU in rt2:
@@ -385,9 +470,9 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R4 type-5 spacing: cache 2*X in 1/144-inch units")
-    print("  R4 feed: each Y emits direct ESC % 9 cached-spacing motion")
-    print("  R4 Y=0: mandatory carriage return, no vertical motion")
+    print("  R5 type-5 state: keep OkiGraph active across normal bands")
+    print("  R5 band feed: native $03 $0E while already in graphics")
+    print("  R5 boundary/text output: automatic $03 $02 exit")
     print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
