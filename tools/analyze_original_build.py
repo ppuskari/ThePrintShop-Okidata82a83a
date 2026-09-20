@@ -200,6 +200,17 @@ def main() -> int:
                     print()
     print()
 
+    print("=== ALL STATUS-SYMBOL OCCURRENCES ===")
+    for d, img in enumerate(images, 1):
+        for e in catalog(img):
+            if not e["name"].upper().endswith(".S"):
+                continue
+            txt = decode(file_sectors(img, e))
+            for n, line in enumerate(txt.splitlines(), 1):
+                if any(sym in line.upper() for sym in ("THINKING", "PRINTING", "PAUSING")):
+                    print("D{} {}:{}: {}".format(d, e["name"], n, line))
+    print()
+
     print("=== PRCOMS STATUS ROUTINES 1045-1150 ===")
     prcoms_status = get_file(images[0], "PRCOMS.S").splitlines()
     for j in range(1044, min(1150, len(prcoms_status))):
