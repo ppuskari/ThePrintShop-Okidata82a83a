@@ -352,6 +352,17 @@ def main() -> int:
         print(f"{j + 1:5d}: {plines[j]}")
     print()
 
+    print("=== PRTYPE SYMBOL DEFINITIONS ===")
+    for d, img in enumerate(images, 1):
+        for e in catalog(img):
+            if not e["name"].upper().endswith(".S"):
+                continue
+            txt = decode(file_sectors(img, e))
+            for n, line in enumerate(txt.splitlines(), 1):
+                if re.search(r"^PRTYPE\\b", line, re.I):
+                    print("D{} {}:{}: {}".format(d, e["name"], n, line))
+    print()
+
     print("=== PRCOMS CONTROL-PATH REFERENCES ===")
     prcoms = get_file(images[0], "PRCOMS.S")
     for n, line in enumerate(prcoms.splitlines(), 1):
