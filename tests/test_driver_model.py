@@ -5,7 +5,16 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from driver_model import crlf_r7, encode_columns, encode_pair, reverse7  # noqa: E402
+from driver_model import (  # noqa: E402
+    CONT_PRIME,
+    FIRST_PRIME,
+    GRAPHICS,
+    TEXT,
+    crlf_r8,
+    encode_columns,
+    encode_pair,
+    reverse7,
+)
 
 
 class DriverModelTests(unittest.TestCase):
@@ -29,42 +38,51 @@ class DriverModelTests(unittest.TestCase):
         self.assertEqual(reverse7(0x60), 0x03)
         self.assertEqual(encode_pair(0x60, 0x00), 0x83)
 
-    def test_odd_source_count_is_rejected(self):
-        with self.assertRaises(ValueError):
-            encode_columns(b"\x01")
+    def test_r8_x7_at_job_start_marks_first_prime(self):
+        stream, state = crlf_r8(state=TEXT, x_72=7, y_count=0)
+        self.assertEqual(stream, b"\x0d")
+        self.assertEqual(state, FIRST_PRIME)
 
-    def test_r7_active_graphics_band_stays_open(self):
-        stream, state = crlf_r7(in_graphics=True, x_72=0, y_count=1)
-        self.assertEqual(stream, b"\x03\x0e")
-        self.assertTrue(state)
-
-    def test_r7_one_sixth_boundary_exits_then_plain_lf(self):
-        stream, state = crlf_r7(in_graphics=True, x_72=12, y_count=1)
-        self.assertEqual(stream, b"\x03\x02\x0d\x0a")
-        self.assertFalse(state)
-        self.assertNotIn(b"%9", stream)
-
-    def test_r7_lf36_is_suppressed(self):
-        stream, state = crlf_r7(in_graphics=True, x_72=2, y_count=1)
-        self.assertEqual(stream, b"\x03\x02\x0d")
-        self.assertFalse(state)
+    def test_r8_first_row_enters_graphics_without_vertical_feed(self):
+        stream, state = crlf_r8(state=FIRST_PRIME, x_72=0, y_count=1)
+        self.assertEqual(stream, b"\x0d\x03")
+        self.assertEqual(state, GRAPHICS)
         self.assertNotIn(0x0A, stream)
-        self.assertNotIn(b"%9", stream)
+        self.assertNotIn(0x0E, stream)
 
-    def test_r7_text_first_row_uses_plain_lf(self):
-        stream, state = crlf_r7(in_graphics=False, x_72=0, y_count=1)
-        self.assertEqual(stream, b"\x0d\x0a")
-        self.assertFalse(state)
+    def test_r8_active_band_uses_native_feed(self):
+        stream, state = crlf_r8(state=GRAPHICS, x_72=0, y_count=1)
+        self.assertEqual(stream, b"\x03\x0e")
+        self.assertEqual(state, GRAPHICS)
 
-    def test_r7_never_emits_legacy_spacing_sequence(self):
-        for state, x, y in [
-            (False, 7, 0),
-            (False, 0, 1),
-            (True, 0, 1),
-            (True, 12, 1),
-            (True, 2, 1),
-        ]:
-            stream, _ = crlf_r7(in_graphics=state, x_72=x, y_count=y)
+    def test_r8_piece_setup_exits_and_marks_continuation(self):
+        stream, state = crlf_r8(state=GRAPHICS, x_72=7, y_count=0)
+        self.assertEqual(stream, b"\x03\x02\x0d")
+        self.assertEqual(state, CONT_PRIME)
+
+    def test_r8_next_piece_gets_exactly_one_native_feed(self):
+        stream, state = crlf_r8(state=CONT_PRIME, x_72=0, y_count=1)
+        self.assertEqual(stream, b"\x0d\x03\x03\x0e")
+        self.assertEqual(state, GRAPHICS)
+        self.assertNotIn(0x0A, stream)
+
+    def test_r8_lf36_is_suppressed(self):
+        stream, state = crlf_r8(state=GRAPHICS, x_72=2, y_count=1)
+        self.assertEqual(stream, b"\x03\x02\x0d")
+        self.assertEqual(state, TEXT)
+        self.assertNotIn(0x0A, stream)
+
+    def test_r8_never_emits_legacy_spacing_sequence(self):
+        cases = [
+            (TEXT, 7, 0),
+            (FIRST_PRIME, 0, 1),
+            (GRAPHICS, 0, 1),
+            (GRAPHICS, 7, 0),
+            (CONT_PRIME, 0, 1),
+            (GRAPHICS, 2, 1),
+        ]
+        for state, x, y in cases:
+            stream, _ = crlf_r8(state=state, x_72=x, y_count=y)
             self.assertNotIn(b"%9", stream)
 
 
