@@ -6,12 +6,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from driver_model import (  # noqa: E402
+    direct_feed_144,
     encode_columns,
     encode_pair,
-    graphics_crlf,
     graphics_record,
     reverse7,
-    text_crlf,
+    type5_crlf,
+    update_spacing_72,
 )
 
 
@@ -45,23 +46,29 @@ class DriverModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             encode_columns(b"\x01")
 
-    def test_r3_text_crlf_has_no_legacy_escape_spacing(self):
-        self.assertEqual(text_crlf(0), b"\x0d")
-        self.assertEqual(text_crlf(2), b"\x0d\x0a\x0a")
-        self.assertNotIn(0x1B, text_crlf(2))
+    def test_r4_x7_y0_caches_exact_14_144_without_feed(self):
+        stream, spacing = type5_crlf(24, 7, 0)
+        self.assertEqual(spacing, 14)
+        self.assertEqual(stream, b"\x0d")
 
-    def test_r3_graphics_zero_count_still_returns_carriage(self):
-        self.assertEqual(graphics_crlf(0), b"\x0d")
+    def test_r4_x0_y1_uses_cached_14_144_direct_feed(self):
+        stream, spacing = type5_crlf(14, 0, 1)
+        self.assertEqual(spacing, 14)
+        self.assertEqual(stream, b"\x0d\x1b%9\x0e")
+        self.assertNotIn(0x0A, stream)
 
-    def test_r3_graphics_feed_enters_then_commands_then_exits(self):
+    def test_r4_spacing_update_and_multiple_feeds(self):
+        stream, spacing = type5_crlf(14, 12, 2)
+        self.assertEqual(spacing, 24)
         self.assertEqual(
-            graphics_crlf(1),
-            b"\x03\x03\x0e\x03\x02",
+            stream,
+            b"\x0d\x1b%9\x18\x1b%9\x18",
         )
-        self.assertEqual(
-            graphics_crlf(2),
-            b"\x03\x03\x0e\x03\x0e\x03\x02",
-        )
+
+    def test_direct_feed_encoding(self):
+        self.assertEqual(direct_feed_144(14), b"\x1b%9\x0e")
+        self.assertEqual(update_spacing_72(14, 0), 14)
+        self.assertEqual(update_spacing_72(14, 3), 6)
 
 
 if __name__ == "__main__":
