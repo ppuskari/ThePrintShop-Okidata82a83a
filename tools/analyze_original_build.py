@@ -7,6 +7,7 @@ import re
 import urllib.parse
 
 from inspect_printshop_source import BASE, NAMES, catalog, fetch, file_sectors
+from build_runtime_disk import fetch_base as fetch_runtime_base
 
 
 def decode(raw: bytes) -> str:
@@ -27,6 +28,23 @@ def get_file(img: bytes, name: str) -> str:
 
 def main() -> int:
     images = [fetch(BASE + urllib.parse.quote(n)) for n in NAMES]
+    runtime = fetch_runtime_base()
+    print("=== COLOR PRINT SHOP RUNTIME GCDRAW ===")
+    for e in catalog(runtime):
+        if e["name"].upper() in ("PRCOMS", "MENUS7", "GCDRAW"):
+            raw = file_sectors(runtime, e)
+            head = raw[:16].hex()
+            if len(raw) >= 4:
+                load = raw[0] | (raw[1] << 8)
+                length = raw[2] | (raw[3] << 8)
+            else:
+                load = length = -1
+            print(
+                f"{e['name']}: type=0x{e['type']:02X} sectors={e['sectors']} "
+                f"raw={len(raw)} load=0x{load:04X} header_len={length} head={head}"
+            )
+    print()
+
 
     for d, img in enumerate(images, 1):
         print(f"=== SOURCE DISK {d} CATALOG ===")
