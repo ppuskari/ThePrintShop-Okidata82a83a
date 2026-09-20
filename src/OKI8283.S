@@ -1,73 +1,48 @@
 * THE PRINT SHOP V2 - OKIDATA 82A/83A OKIGRAPH I
 *
-* R8 HARDWARE-VALIDATION BUILD
+* R9A HARDWARE-VALIDATION BUILD
 *
-* R8 keeps the hardware-proven compact R7 PRCOMS graphics path and patches
-* the greeting-card/sign DRAW1 overlay (historical source GCDRAW.S) at the
-* exact DUMP boundary that produced the repeatable THINKING -> PRINTING
-* micro-feed.
+* R9 (SHA256 29d2...) is retired.  It clobbered A/SIDE while checking PRTYPE
+* inside GCDRAW, causing DUMP1 to select the wrong card-buffer base and decode
+* unrelated memory as printer raster data.
 *
-* Runtime overlay mapping is byte-for-byte proven:
+* R9A keeps the exact validated R8 PRCOMS and MENUS7 binaries and changes only
+* GCDRAW/DRAW1.
 *
-*   PRCOMS.S  -> PRCOMS   load $1800
-*   MENUS7.S  -> MENUS7   load $6300
-*   GCDRAW.S  -> DRAW1    load $7800
+* R9A vertical correction:
 *
-* R8 PRCOMS behavior:
+*   Print Shop nominal band pitch = 14/144 inch
+*   OkiGraph native graphics feed = 15/144 inch
 *
-*   FIX80 = 0             text/control state
-*   FIX80 = 1             OkiGraph graphics state
+* A monochrome greeting-card side historically contains 28 seven-row source
+* bands (196 source rows).  R9A emits 26 bands while distributing fourteen
+* single-row skips through the source walk.  The first source row and final
+* source row remain represented.
 *
-*   active X=0,Y>0:
-*       $03,$0E           native graphics feed + carriage return
+* MAKEBUF proves one source scanline is $40 bytes:
 *
-*   spacing/boundary:
-*       $03,$02           exit graphics when active
-*       $0D               carriage return
+*   DADDR += $40 for each of the seven rows decoded into one printer band.
 *
-*   X=2 (LF36):
-*       no vertical feed  (firmware has no proven exact 1/36" host command)
+* Therefore R9A advances BADDR by either:
 *
-* The inherited ML92/93 ESC '%' '9' sequence is never used; physical R6
-* testing showed that bytes from that sequence can print literally.
+*   +$01C0 / -$01C0   normal seven-row source step
+*   +$0200 / -$0200   eight-row step (skip one source row)
 *
-* R8 DRAW1/GCDRAW behavior:
+* The printer-type test uses Y:
 *
-* Every DUMP begins with Print Shop's X=7,Y=0 setup followed historically by
-* X=0,Y=1 before the first raster row.  R7 was therefore in text state for
-* that first-row call and emitted an ordinary LF (~24/144"), causing the
-* visible micro-step at each piece boundary.
+*   LDY $95F1
+*   CPY #05
 *
-* R8 explicitly enters graphics after the X=7 setup.
+* so A remains the SIDE value required by DUMP1's subsequent CMP #01.
 *
-* For the first outside-card DUMP only, the historical first-row CRLF is
-* skipped so the first graphics row prints at the operator's physical
-* print-head position with no initial paper advance.
+* R8 behavior retained:
+*   - first outside-card raster starts at the physical head baseline;
+*   - later DUMP boundaries use one native graphics feed;
+*   - continuous graphics uses $03,$0E;
+*   - legacy ML92/93 ESC '%' '9' is never emitted;
+*   - LF36 remains suppressed.
 *
-* For subsequent pieces, the first-row X=0,Y=1 runs while graphics is active,
-* producing exactly one native $03,$0E feed, the same as ordinary in-piece
-* band stepping.
-*
-* Graphics data conversion remains:
-*
-*   wire = $80 | reverse7(source0 | source1)
-*
-* Greeting-card GCDRAW uses fixed even SENDGC source counts ($0200/$0400);
-* the persistent right-edge motif defect is therefore not explained by an
-* odd source count or trailing-blank truncation.
-*
-* Known dimensional limit still under investigation:
-*
-*   Print Shop nominal band pitch = 7/72" = 14/144"
-*   OkiGraph native band feed     = 15/144"
-*
-* That one-step difference predicts ~7.1% vertical stretch.  R8 intentionally
-* does not disguise it with unsupported printer commands; a later build can
-* address it by source-row resampling after the DUMP-boundary behavior is
-* isolated on hardware.
-*
-* R8 executable overlays:
-*
+* Validated R9A overlays:
 *   PRCOMS.OKI  2034 bytes
 *   MENUS7.OKI  3018 bytes
-*   GCDRAW.OKI  2762 bytes (installed as DRAW1)
+*   GCDRAW.OKI  2802 bytes (runtime DRAW1)
