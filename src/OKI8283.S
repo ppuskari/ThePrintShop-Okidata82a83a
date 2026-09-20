@@ -1,40 +1,32 @@
 * THE PRINT SHOP V2 - OKIDATA 82A/83A OKIGRAPH I
 *
-* R12 HARDWARE-VALIDATION BUILD
+* R13 HARDWARE-VALIDATION BUILD
 *
-* R11 is the hardware-good OkiGraph-I driver baseline.  Its PRCOMS and
-* MENUS7 binaries are unchanged in R12.
+* R11 remains the hardware-good OkiGraph-I graphics baseline.
+* R12 removed the common GCDRAW startup LF36.
 *
-* R12 changes only the common GCDRAW/DRAW1 startup positioning used by every
-* printer type for greeting cards/signs.
+* Hardware validation of R12 showed one remaining full first-row feed before
+* the physically first greeting-card pane when the paper top is aligned with
+* the top print-head pin.
 *
-* Historical GCDRAW begins DOALL with:
+* R13 leaves PRCOMS and MENUS7 exactly at their R11 hardware-good hashes and
+* changes only GCDRAW/DRAW1 first-row positioning.
 *
-*   JSR LF36
+* The first inside-card pass has:
 *
-* before the first piece is built and dumped.  The drawing path then performs
-* its own first-row positioning, so the job starts with two stacked vertical
-* motions.  This behavior is printer-independent and therefore appears on
-* Epson, DMP/ImageWriter, ImageWriter II, Okidata, and the other supported
-* printers.
+*   PIECE + YMAX = 392
 *
-* R12 replaces only that initial JSR LF36 with three NOPs, preserving code
-* size and all following addresses:
+* for both monochrome and color.  Its low byte is therefore $88:
 *
-*   NOP
-*   NOP
-*   NOP
+*   monochrome: 196 + 196 = 392
+*   color:      343 +  49 = 392
 *
-* End-of-job and fold/inter-piece LF36 calls are left intact.  The drawing
-* path still supplies the single first-row advance needed to begin output.
+* While CREDBUF-1 is still zero, R13 checks that low-byte sum and skips only
+* that first ROW CRLF.  The existing one-time outside-card first-row
+* suppression remains intact, and later raster rows, folds, piece transitions,
+* and R9A/R10/R11 OkiGraph behavior are unchanged.
 *
-* R11 OkiGraph behavior retained exactly:
-*   - 7-bit logical graphics data
-*   - literal $03 escaped as $03,$03
-*   - R9A vertical resampling
-*   - R10 per-band hard carriage registration
-*
-* Validated R12 overlays:
+* Validated R13 overlays:
 *   PRCOMS.OKI  2039 bytes
 *   MENUS7.OKI  3018 bytes
-*   GCDRAW.OKI  2807 bytes (runtime DRAW1)
+*   GCDRAW.OKI  2812 bytes (runtime DRAW1)
