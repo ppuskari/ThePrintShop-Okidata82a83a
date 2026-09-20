@@ -200,6 +200,13 @@ def main() -> int:
                     print()
     print()
 
+    print("=== PRCOMS STATUS SYMBOL OCCURRENCES ===")
+    prcoms_scan = get_file(images[0], "PRCOMS.S")
+    for n, line in enumerate(prcoms_scan.splitlines(), 1):
+        if any(sym in line.upper() for sym in ("THINKING", "PRINTING", "PAUSING")):
+            print(f"{n:5d}: {line}")
+    print()
+
     print("=== PRCOMS THINKING/PRINTING/PAUSING ===")
     prcoms = get_file(images[0], "PRCOMS.S")
     plines = prcoms.splitlines()
