@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R11 executable disk build: implemented and CI-validated; physical printer validation is next.**
+**R12 executable disk build: implemented and CI-validated; hardware validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -21,14 +21,60 @@ starting point for the 82A/83A OkiGraph I driver because it already:
 The v0.1 driver deliberately repurposes that printer type instead of adding
 a tenth selector immediately.
 
-The graphics-byte conversion becomes:
+The hardware-good R11 graphics-byte conversion is:
 
 ```
-wire = $80 | reverse7(source0 | source1)
+logical = reverse7(source0 | source1)
+
+normal logical byte -> send once
+logical $03         -> send $03,$03
 ```
 
-Forcing bit 7 high preserves the seven dot bits while preventing graphics
-data from ever colliding with OkiGraph's ETX (`$03`) command prefix.
+The doubled-ETX rule restores the historical Okidata type-5 literal-data
+escape and eliminated the progressive horizontal column loss seen in earlier
+builds.
+
+## R12 common startup-feed cleanup
+
+R12 keeps the hardware-good R11 OkiGraph driver unchanged and modifies only
+the common greeting-card/sign drawing overlay.
+
+Historical `GCDRAW` begins the print job with:
+
+```
+JSR LF36
+```
+
+before the drawing path performs its own first-row positioning.  That produces
+two stacked startup vertical motions and affects every printer type using the
+same base program path, including Epson, DMP/ImageWriter, ImageWriter II, and
+Okidata.
+
+R12 replaces only that initial three-byte `JSR LF36` with three `NOP`
+instructions.  End-of-job, fold, and inter-piece positioning remain unchanged.
+
+Validated R12 runtime image:
+
+```
+size   143360 bytes
+SHA256 4259a5e98464f32e1aec691ae3365d21e471ceb585a12ee5ec54be4b8175ac0d
+```
+
+Validated R12 overlays:
+
+```
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+
+GCDRAW.OKI -> runtime DRAW1
+length 2807
+SHA256 46a9e2c6777a4da7d96cceabdbb5c7246421067bf2b529410a99bb9b0e406011
+```
 
 ## R11 horizontal-stream test
 
@@ -87,11 +133,11 @@ It creates:
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 ```
 
-Current R7 validated image:
+Current R12 validated image:
 
 ```
 size   143360 bytes
-SHA256 9767fdfaffdf0bc2ca960f418c5178a84f00bdd8ebdd8fc5a53f293f9a6e8945
+SHA256 4259a5e98464f32e1aec691ae3365d21e471ceb585a12ee5ec54be4b8175ac0d
 ```
 
 R6 was physically validated and was the closest result yet: the total vertical
