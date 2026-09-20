@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R6 executable disk build: implemented and CI-validated; physical printer validation is next.**
+**R7 executable disk build: implemented and CI-validated; physical printer validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -64,38 +64,43 @@ It creates:
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 ```
 
-Current R6 validated image:
+Current R7 validated image:
 
 ```
 size   143360 bytes
-SHA256 09122e40e8baead48a86d35f348532e6298efa0a1f573f68eb5f4b89b62913e0
+SHA256 9767fdfaffdf0bc2ca960f418c5178a84f00bdd8ebdd8fc5a53f293f9a6e8945
 ```
 
-R5 was the closest hardware result yet: continuous OkiGraph state across normal
-seven-dot bands made most border motifs contiguous and stopped the runaway
-carriage behavior. The remaining sheet showed stale control bytes before the
-welcome text, incomplete right-edge motifs/corruption, and excessive spacing
-at the card/page-half reposition.
+R6 was physically validated and was the closest result yet: the total vertical
+size was within roughly half an inch, but literal control-sequence fragments
+still appeared at the start/midpoint/end, several border motifs lost their
+lower portion near the right edge, and two card quadrants showed localized
+raster corruption.
 
-R6 keeps the R5 continuous-graphics band path but adds deterministic state
-initialization when printer type 5 is selected. It also caches Print Shop's
-requested X spacing in 1/144-inch units and uses `ESC % 9 n` as the direct
-vertical movement for text/boundary reposition calls, with no extra LF.
-Normal in-graphics row advances remain native `$03 $0E`.
+The R6 sheet proved that the inherited ML92/93 `ESC % 9 n` sequence must not
+be used on this OkiGraph-I path. R7 removes it completely and returns to the
+hardware-proven R5 continuous-graphics core. Type-5 state is initialized when
+the printer is selected. Normal in-graphics rows remain `$03 $0E`; X=12
+boundary motion uses ordinary 1/6-inch LF; and Print Shop's X=2 LF36 helper is
+suppressed rather than being incorrectly expanded to a full LF.
 
-Validated R6 overlays:
+Greeting-card source tracing also confirmed that GCDRAW uses fixed even
+`SENDGC` sizes (`$0200`/`$0400`), so the observed right-edge card defect
+is not caused by variable blank trimming or an odd transaction count.
+
+Validated R7 overlays:
 
 ```
 PRCOMS.OKI
-length 2042
-SHA256 d1cd460b9d8a6660395ed868e72c830437c3fe8e4a4a96ed63977e394ec07c90
+length 2034
+SHA256 a960e7c6a92003f4a7cc42dda5db75b433d75abb4adfb30d40bc30c156f68124
 
 MENUS7.OKI
-length 3022
-SHA256 6c35e2f9b1771c35a41f5686e1079d32f08d70bd75470f7f565c96c5fddb8bf8
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
 ```
 
-PRCOMS remains entirely below the Apple II $2000 boundary.
+PRCOMS remains entirely below the Apple II `$2000` boundary.
 
 The script uses an installed Merlin32 if available; otherwise it downloads
 the pinned v1.1.10 Windows build. It verifies the original runtime overlays
@@ -183,7 +188,7 @@ https://github.com/ppuskari/Okidata-Microline-82A-83A
 
 ## Next milestone
 
-Validate the R6 disk on the physical 82A/83A. The specific targets are removal
+Validate the R7 disk on the physical 82A/83A. The specific targets are removal
 of the stray control/text output at graphics transitions, elimination of the
 extra vertical gap between seven-dot bands, and restoration of one-page layout.
 
