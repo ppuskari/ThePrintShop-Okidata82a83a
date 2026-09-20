@@ -4,6 +4,11 @@ ETX = 0x03
 EXIT_GRAPHICS = 0x02
 GRAPHICS_LF_CR = 0x0E
 
+TEXT = 0
+GRAPHICS = 1
+FIRST_PRIME = 2
+CONT_PRIME = 3
+
 
 def reverse7(value: int) -> int:
     value &= 0x7F
@@ -28,33 +33,50 @@ def encode_columns(source: bytes) -> bytes:
     )
 
 
-def crlf_r7(*, in_graphics: bool, x_72: int, y_count: int) -> tuple[bytes, bool]:
-    """Compact R7 type-5 control path based on hardware-proven R5.
+def crlf_r8(*, state: int, x_72: int, y_count: int) -> tuple[bytes, int]:
+    """Model R8 type-5 CRLF behavior.
 
-    * Active graphics + X=0,Y>0: native graphics feed+CR; remain in graphics.
-    * Other calls exit graphics first, then return carriage.
-    * X=2 is Print Shop LF36 and is suppressed instead of overfeeding 1/6 inch.
-    * Other text/boundary Y advances use ordinary LF.
-    * No ESC % 9 sequence is emitted.
+    Print Shop DUMP begins each piece with X=7,Y=0 followed by X=0,Y=1.
+    R8 marks the first such setup as FIRST_PRIME and later setups that occur
+    after active graphics as CONT_PRIME.
+
+    FIRST_PRIME enters graphics at the current physical paper position with
+    no vertical feed. CONT_PRIME enters graphics and performs one native
+    graphics feed+CR. Subsequent active X=0,Y>0 calls remain in graphics and
+    use native feed+CR. X=2 (LF36) remains suppressed.
     """
+    if state not in (TEXT, GRAPHICS, FIRST_PRIME, CONT_PRIME):
+        state = TEXT
     if x_72 < 0 or y_count < 0:
         raise ValueError("X and Y must be non-negative")
 
     out = bytearray()
 
-    if in_graphics and x_72 == 0 and y_count > 0:
-        for _ in range(y_count):
-            out += bytes([ETX, GRAPHICS_LF_CR])
-        return bytes(out), True
+    if state == GRAPHICS:
+        if x_72 == 0 and y_count > 0:
+            for _ in range(y_count):
+                out += bytes([ETX, GRAPHICS_LF_CR])
+            return bytes(out), GRAPHICS
 
-    if in_graphics:
         out += bytes([ETX, EXIT_GRAPHICS])
-        in_graphics = False
+        state = CONT_PRIME if x_72 == 7 else TEXT
+
+    elif state in (FIRST_PRIME, CONT_PRIME):
+        prime = state
+        out.append(0x0D)
+        state = GRAPHICS
+        out.append(ETX)
+        if prime == CONT_PRIME:
+            out += bytes([ETX, GRAPHICS_LF_CR])
+        return bytes(out), state
+
+    elif x_72 == 7:
+        state = FIRST_PRIME
 
     out.append(0x0D)
 
     if y_count == 0 or x_72 == 2:
-        return bytes(out), in_graphics
+        return bytes(out), state
 
     out += bytes([0x0A]) * y_count
-    return bytes(out), in_graphics
+    return bytes(out), state
