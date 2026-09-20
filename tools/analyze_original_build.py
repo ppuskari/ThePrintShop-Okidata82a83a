@@ -76,7 +76,7 @@ def main() -> int:
     print()
 
     print("=== SCRATCH SYMBOL REFERENCES ===")
-    for symbol in ("FIX80", "GCINDEX", "GCOLD"):
+    for symbol in ("FIX80", "GCINDEX", "GCOLD", "QL", "QH"):
         print(f"--- {symbol} ---")
         for d, img in enumerate(images, 1):
             for e in catalog(img):
