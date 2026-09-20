@@ -217,15 +217,14 @@ COUT1A LDX PITYPE
 """
 
 SETLF5_OLD = re.compile(
-    r"(?m)^SETLF5 LDA #\$25\n"
-    r"[ \t]*JSR COUT1\n"
-    r"[ \t]*LDA #\$39\n"
-    r"[ \t]*JSR COUT1\n"
-    r"[ \t]*TXA\n"
-    r"[ \t]*ASL\n"
-    r"[ \t]+JMP COUT1$"
+    r"(?m)^SETLF5 LDA #'%'\\n"
+    r"[ \\t]*JSR COUT1\\n"
+    r"[ \\t]*LDA #'9'\\n"
+    r"[ \\t]*JSR COUT1\\n"
+    r"[ \\t]*TXA\\n"
+    r"[ \\t]*ASL\\n"
+    r"[ \\t]*JMP COUT1$"
 )
-
 SETLF5_NEW = """SETLF5 LDA #$25
  JSR COUT1
  LDA #$39
