@@ -65,8 +65,10 @@ GC5_NEW = """GC5A PLA
  ORA GCOLD
  STX XTEMP
  JSR REVBITS
- ORA #$80
  LDX XTEMP
+ JSR COUTRAW
+ CMP #03
+ BNE GC5B
  JSR COUTRAW
 GC5B PHA"""
 
@@ -676,11 +678,11 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R10 PRCOMS/MENUS7: exact validated R8/R9A binaries")
-    print("  R10 vertical resampler: exact R9A geometry retained")
-    print("  R10 horizontal registration: text-mode CR before each raster SENDGC")
-    print("  R10 CR is carriage-only: no added line feed")
-    print("  graphics data: reverse7(pair OR) | $80")
+    print("  R11 vertical/horizontal geometry: exact R10 DRAW1 behavior retained")
+    print("  R11 type-5 graphics data: raw reverse7(pair OR), no forced bit 7")
+    print("  R11 literal $03 graphics byte: escaped as $03,$03")
+    print("  R11 hypothesis: prevent command-parser column loss mid-row")
+    print("  graphics data: original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
     print(f"  MENUS7 source high-bit ratio: {menus7_info['high_ratio']:.3f}")
