@@ -107,3 +107,22 @@ def gcdraw_piece_start(
         out += stream
 
     return bytes(out), in_graphics
+
+
+def r9_card_band_starts() -> list[int]:
+    """Source-row starts for the 26-band monochrome card resampler.
+
+    The historical card piece contains 28 bands * 7 = 196 source rows.
+    R9 emits 26 bands * 7 = 182 output rows and distributes 14 skipped
+    source rows across the 25 inter-band transitions.  The first band starts
+    at source row 0 and the last starts at 189, covering source rows 189..195.
+    """
+    starts = [0]
+    rowcnt = 26
+    source = 0
+    while rowcnt > 1:
+        skip_one = (rowcnt % 2 == 0) or (rowcnt == 15)
+        source += 7 + (1 if skip_one else 0)
+        rowcnt -= 1
+        starts.append(source)
+    return starts
