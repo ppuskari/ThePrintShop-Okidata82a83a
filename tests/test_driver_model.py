@@ -11,6 +11,7 @@ from driver_model import (  # noqa: E402
     encode_pair,
     gcdraw_piece_start,
     reverse7,
+    r9_card_band_starts,
     sendgc_begin,
 )
 
