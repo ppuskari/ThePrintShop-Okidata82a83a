@@ -103,15 +103,24 @@ CRLF2 LDA #$0A
  BPL CRLF2
  BMI CRLFX
 *
-* OKIGRAPH I TYPE-5 CR/LF - R5
+* OKIGRAPH I TYPE-5 CR/LF - R6
 *
-* FIX80 is type-5 graphics-state: 0=text, 1=graphics.
-* Keep graphics active across the normal X=0,Y>0 row advance
-* and use native ETX,$0E while already in graphics state.
-* Any spacing/boundary change (X!=0) or CR-only call exits
-* graphics first and then performs text-mode CR/LF.
+* FIX80 is graphics state: 0=text, 1=graphics.
+* QL caches Print Shop X spacing as 2*X in 1/144-inch units.
 *
-CRLF5 LDA FIX80
+* While graphics is active, the normal X=0,Y>0 band advance
+* remains native ETX,$0E and stays in graphics.
+*
+* At a spacing/boundary change, exit graphics, return carriage,
+* and use ESC % 9 QL as the direct vertical motion.  Do NOT add
+* a normal LF after that command.
+*
+CRLF5 CPX #00
+ BEQ CRLF5S
+ TXA
+ ASL
+ STA QL
+CRLF5S LDA FIX80
  BEQ CRLF5T
  CPX #00
  BNE CRLF5E
@@ -132,6 +141,13 @@ CRLF5E LDA #03
 CRLF5T LDA #$0D
  JSR COUTRAW
  DEY
+ BMI CRLFX
+ LDA QL
+ BEQ CRLF5L
+CRLF5D JSR ESCOUT
+ JSR SETLF5
+ DEY
+ BPL CRLF5D
  BMI CRLFX
 CRLF5L LDA #$0A
  JSR COUTRAW
@@ -199,6 +215,35 @@ COUTRAW STX XTEMP
  PHA
 COUT1A LDX PITYPE
 """
+
+SETLF5_OLD = re.compile(
+    r"(?m)^SETLF5 LDA #\\$25\\n"
+    r"[ \\t]+JSR COUT1\\n"
+    r"[ \\t]+LDA #\\$39\\n"
+    r"[ \\t]+JSR COUT1\\n"
+    r"[ \\t]+TXA\\n"
+    r"[ \\t]+ASL\\n"
+    r"[ \\t]+JMP COUT1$"
+)
+
+SETLF5_NEW = """SETLF5 LDA #$25
+ JSR COUT1
+ LDA #$39
+ JSR COUT1
+ LDA QL
+ JMP COUT1"""
+
+MENUS_INIT_OLD = """ JSR GSELECT
+ STA PRTYPE
+ LDA RETFLAG"""
+
+MENUS_INIT_NEW = """ JSR GSELECT
+ STA PRTYPE
+ LDA #00
+ STA $B9
+ STA $BC
+ LDA RETFLAG"""
+
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
@@ -298,11 +343,19 @@ def patch_prcoms(text: str) -> str:
             f"found {len(cout1_matches)}"
         )
 
+    setlf5_matches = list(SETLF5_OLD.finditer(text))
+    if len(setlf5_matches) != 1:
+        raise RuntimeError(
+            "PRCOMS.S SETLF5 block: expected exactly one original block, "
+            f"found {len(setlf5_matches)}"
+        )
+
     patched = CRLF_OLD.sub(CRLF_NEW, text, count=1)
     patched = SGC5_OLD.sub(SGC5_NEW, patched, count=1)
     patched = GC5_OLD.sub(GC5_NEW, patched, count=1)
     patched = GC5_END_OLD.sub(GC5_END_NEW, patched, count=1)
     patched = COUT1_OLD.sub(COUT1_NEW, patched, count=1)
+    patched = SETLF5_OLD.sub(SETLF5_NEW, patched, count=1)
 
     return patched
 
@@ -310,7 +363,14 @@ def patch_prcoms(text: str) -> str:
 def patch_menus(text: str) -> str:
     if len(OLD_MENU) != len(NEW_MENU):
         raise AssertionError("menu replacement must remain length-preserving")
-    return replace_once(text, OLD_MENU, NEW_MENU, "MENUS7.S printer label")
+    patched = replace_once(text, OLD_MENU, NEW_MENU, "MENUS7.S printer label")
+    patched = replace_once(
+        patched,
+        MENUS_INIT_OLD,
+        MENUS_INIT_NEW,
+        "MENUS7.S type-5 state initialization",
+    )
+    return patched
 
 
 def load_image(path: pathlib.Path | None, disk_index: int) -> bytes:
@@ -424,8 +484,15 @@ def write_patched_disks(
         or "COUTRAW STX XTEMP\n" not in rt1
     ):
         raise RuntimeError("generated source disk 1 does not contain the OkiGraph GC5 patch")
-    if NEW_MENU not in rt2 or OLD_MENU in rt2:
-        raise RuntimeError("generated source disk 2 does not contain the OkiGraph menu patch")
+    if (
+        NEW_MENU not in rt2
+        or OLD_MENU in rt2
+        or " STA $B9\n" not in rt2
+        or " STA $BC\n" not in rt2
+    ):
+        raise RuntimeError(
+            "generated source disk 2 does not contain the OkiGraph menu/init patch"
+        )
 
     print("  generated DOS 3.3 source disks:")
     print(f"    {p1}")
@@ -467,9 +534,9 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R5 type-5 state: keep OkiGraph active across normal bands")
-    print("  R5 band feed: native $03 $0E while already in graphics")
-    print("  R5 boundary/text output: automatic $03 $02 exit")
+    print("  R6 type-5 state: initialized at printer selection")
+    print("  R6 normal band feed: native $03 $0E in continuous graphics")
+    print("  R6 boundary feed: direct ESC % 9 cached spacing, no extra LF")
     print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
