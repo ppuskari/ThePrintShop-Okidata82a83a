@@ -30,6 +30,24 @@ def main() -> int:
     images = [fetch(BASE + urllib.parse.quote(n)) for n in NAMES]
     runtime = fetch_runtime_base()
     print("=== COLOR PRINT SHOP RUNTIME GCDRAW ===")
+    print("=== COLOR PRINT SHOP RUNTIME BINARY MAP ===")
+    for e in catalog(runtime):
+        raw = file_sectors(runtime, e)
+        if e["type"] == 0x04 and len(raw) >= 4:
+            load = raw[0] | (raw[1] << 8)
+            length = raw[2] | (raw[3] << 8)
+            print(
+                f"{e['name']:<30} sectors={e['sectors']:<3} "
+                f"load=0x{load:04X} len={length}"
+            )
+    print()
+
+    print("=== GCDRAW SOURCE HEADER ===")
+    gd = get_file(images[1], "GCDRAW.S").splitlines()
+    for j in range(0, min(80, len(gd))):
+        print(f"{j + 1:5d}: {gd[j]}")
+    print()
+
     for e in catalog(runtime):
         if e["name"].upper() in ("PRCOMS", "MENUS7", "GCDRAW"):
             raw = file_sectors(runtime, e)
