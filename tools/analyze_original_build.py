@@ -412,6 +412,31 @@ def main() -> int:
                 break
     print()
 
+    print("=== POSSIBLE DOUBLE-FEED / PRINT-START SITES ===")
+    for d, img in enumerate(images, 1):
+        for e in catalog(img):
+            if not e["name"].upper().endswith(".S"):
+                continue
+            txt = decode(file_sectors(img, e))
+            lines = txt.splitlines()
+            for i, line in enumerate(lines):
+                up = line.upper()
+                if (
+                    re.search(r"LDY\s+#\$?0?2\b", up)
+                    or "PRINT" in up
+                    or "START" in up
+                    or "TOP" in up
+                ):
+                    lo = max(0, i - 6)
+                    hi = min(len(lines), i + 10)
+                    block = "\n".join(lines[lo:hi])
+                    if re.search(r"\bCRLF\b", block, re.I):
+                        print(f"--- D{d} {e['name']} line {i + 1} ---")
+                        for j in range(lo, hi):
+                            print(f"{j + 1:5d}: {lines[j]}")
+                        print()
+    print()
+
     print("=== ALL IMMEDIATE CRLF CALLS ===")
     for d, img in enumerate(images, 1):
         for e in catalog(img):
