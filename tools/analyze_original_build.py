@@ -200,6 +200,12 @@ def main() -> int:
                     print()
     print()
 
+    print("=== GCDRAW STATUS/PRINT CONTROL 220-330 ===")
+    gcstat = get_file(images[1], "GCDRAW.S").splitlines()
+    for j in range(219, min(330, len(gcstat))):
+        print(f"{j + 1:5d}: {gcstat[j]}")
+    print()
+
     print("=== ALL STATUS-SYMBOL OCCURRENCES ===")
     for d, img in enumerate(images, 1):
         for e in catalog(img):
