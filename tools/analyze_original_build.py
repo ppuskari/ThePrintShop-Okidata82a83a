@@ -275,6 +275,12 @@ def main() -> int:
             break
     print()
 
+    print("=== GCDRAW MAKEBUF 1510-1575 ===")
+    gcmb = get_file(images[1], "GCDRAW.S").splitlines()
+    for j in range(1509, min(1575, len(gcmb))):
+        print(f"{j + 1:5d}: {gcmb[j]}")
+    print()
+
     print("=== GCDRAW DUMP ROUTINE 1340-1515 ===")
     gcdump = get_file(images[1], "GCDRAW.S").splitlines()
     for j in range(1339, min(1515, len(gcdump))):
