@@ -9,6 +9,7 @@ from driver_model import (  # noqa: E402
     crlf_type5,
     encode_columns,
     encode_pair,
+    escape_graphics_byte,
     gcdraw_piece_start,
     reverse7,
     r9_card_band_starts,
@@ -23,19 +24,21 @@ class DriverModelTests(unittest.TestCase):
         self.assertEqual(reverse7(0x7F), 0x7F)
 
     def test_pair_collapses_120_to_60_cpi(self):
-        self.assertEqual(encode_pair(0x01, 0x00), 0xC0)
-        self.assertEqual(encode_pair(0x00, 0x40), 0x81)
-        self.assertEqual(encode_pair(0x01, 0x40), 0xC1)
+        self.assertEqual(encode_pair(0x01, 0x00), 0x40)
+        self.assertEqual(encode_pair(0x00, 0x40), 0x01)
+        self.assertEqual(encode_pair(0x01, 0x40), 0x41)
 
-    def test_wire_data_always_has_bit7_set(self):
+    def test_r11_wire_stream_is_7_bit_graphics_data(self):
         source = bytes(range(128)) * 2
         encoded = encode_columns(source)
-        self.assertTrue(all(b & 0x80 for b in encoded))
-        self.assertNotIn(0x03, encoded)
+        self.assertTrue(encoded)
+        self.assertTrue(all(b < 0x80 for b in encoded))
 
-    def test_old_etx_collision_becomes_83(self):
+    def test_r11_literal_etx_is_doubled(self):
         self.assertEqual(reverse7(0x60), 0x03)
-        self.assertEqual(encode_pair(0x60, 0x00), 0x83)
+        self.assertEqual(encode_pair(0x60, 0x00), 0x03)
+        self.assertEqual(escape_graphics_byte(0x03), b"\x03\x03")
+        self.assertIn(b"\x03\x03", encode_columns(b"\x60\x00"))
 
     def test_sendgc_enters_graphics_once(self):
         self.assertEqual(sendgc_begin(False), (b"\x03", True))
