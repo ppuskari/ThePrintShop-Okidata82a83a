@@ -283,38 +283,49 @@ SR08A DEC ROWCNT
 
 GCDRAW_STEP_NEW = """SR08 STA BADDR+1
 *
-* R9 MONO CARD VERTICAL RESAMPLER
-* 28 X 7 SOURCE ROWS -> 26 X 7 OUTPUT ROWS.
-* KEEP FIRST/LAST SOURCE ROW; DISTRIBUTE 14 SINGLE-ROW SKIPS.
+SR08A JSR R9STEP
+ DEC ROWCNT
+ BNE SR09
+ RTS"""
+
+
+GCDRAW_HELPER_OLD = """ BCS SR02
 *
-SR08A LDA COLORPR
- BNE SR08D
+GCNUMH HEX 040204"""
+
+GCDRAW_HELPER_NEW = """ BCS SR02
+*
+* R9 MONO CARD VERTICAL RESAMPLER.
+* CALLED AFTER NORMAL +/-7-ROW BADDR STEP.
+*
+R9STEP LDA COLORPR
+ BNE R9X
  LDA SIDE
  CMP #02
- BEQ SR08D
+ BEQ R9X
  LDA ROWCNT
  CMP #15
- BEQ SR08S
+ BEQ R9S
  LSR
- BCS SR08D
-SR08S LDA SIDE
- BNE SR08M
+ BCS R9X
+R9S LDA SIDE
+ BNE R9M
  LDA BADDR
  CLC
  ADC #$40
  STA BADDR
- BCC SR08D
+ BCC R9X
  INC BADDR+1
- BNE SR08D
-SR08M LDA BADDR
+R9X RTS
+R9M LDA BADDR
  SEC
  SBC #$40
  STA BADDR
- BCS SR08D
+ BCS R9X
  DEC BADDR+1
-SR08D DEC ROWCNT
- BNE SR09
- RTS"""
+ RTS
+*
+GCNUMH HEX 040204"""
 
 
 def patch_gcdraw(text: str) -> str:
@@ -330,11 +341,17 @@ def patch_gcdraw(text: str) -> str:
         GCDRAW_ROWCOUNT_NEW,
         "GCDRAW.S monochrome card row-count block",
     )
-    return replace_once(
+    patched = replace_once(
         patched,
         GCDRAW_STEP_OLD,
         GCDRAW_STEP_NEW,
-        "GCDRAW.S monochrome card row-resample step",
+        "GCDRAW.S monochrome card row-resample call",
+    )
+    return replace_once(
+        patched,
+        GCDRAW_HELPER_OLD,
+        GCDRAW_HELPER_NEW,
+        "GCDRAW.S monochrome card row-resample helper",
     )
 
 def sha256_text(text: str) -> str:
