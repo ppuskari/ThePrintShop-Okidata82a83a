@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import urllib.parse
 
@@ -30,6 +31,20 @@ def main() -> int:
     images = [fetch(BASE + urllib.parse.quote(n)) for n in NAMES]
     runtime = fetch_runtime_base()
     print("=== COLOR PRINT SHOP RUNTIME GCDRAW ===")
+    print("=== DRAW1 RUNTIME PAYLOAD HASH ===")
+    for e in catalog(runtime):
+        if e["name"].upper() == "DRAW1":
+            raw = file_sectors(runtime, e)
+            load = raw[0] | (raw[1] << 8)
+            length = raw[2] | (raw[3] << 8)
+            payload = raw[4:4 + length]
+            print(
+                f"DRAW1 load=0x{load:04X} len={len(payload)} "
+                f"sha256={hashlib.sha256(payload).hexdigest()}"
+            )
+            break
+    print()
+
     print("=== COLOR PRINT SHOP RUNTIME BINARY MAP ===")
     for e in catalog(runtime):
         raw = file_sectors(runtime, e)
