@@ -55,7 +55,7 @@ def main() -> int:
                     continue
                 txt = decode(file_sectors(img, e))
                 for n, line in enumerate(txt.splitlines(), 1):
-                    if re.search(rf"\\b{symbol}\\b", line, re.I):
+                    if re.search(rf"\b{symbol}\b", line, re.I):
                         print(f"D{d} {e['name']}:{n}: {line}")
         print()
     print()
