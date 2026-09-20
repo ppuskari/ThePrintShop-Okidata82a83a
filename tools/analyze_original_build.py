@@ -46,6 +46,23 @@ def main() -> int:
             print(text[:20000])
             print()
 
+    print("=== PRTYPE WRITE SITES ===")
+    for d, img in enumerate(images, 1):
+        for e in catalog(img):
+            if not e["name"].upper().endswith(".S"):
+                continue
+            txt = decode(file_sectors(img, e))
+            lines = txt.splitlines()
+            for i, line in enumerate(lines):
+                if re.search(r"\b(STA|STX|STY)\s+PRTYPE\b", line, re.I):
+                    lo = max(0, i - 10)
+                    hi = min(len(lines), i + 12)
+                    print(f"--- D{d} {e['name']} line {i + 1} ---")
+                    for j in range(lo, hi):
+                        print(f"{j + 1:5d}: {lines[j]}")
+                    print()
+    print()
+
     print("=== SCRATCH SYMBOL REFERENCES ===")
     for symbol in ("FIX80", "GCINDEX", "GCOLD"):
         print(f"--- {symbol} ---")
