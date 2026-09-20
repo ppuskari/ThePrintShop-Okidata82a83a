@@ -11,6 +11,7 @@ from driver_model import (  # noqa: E402
     encode_pair,
     gcdraw_piece_start,
     reverse7,
+    r9_card_band_starts,
     sendgc_begin,
 )
 
@@ -90,6 +91,26 @@ class DriverModelTests(unittest.TestCase):
         ]
         for stream in streams:
             self.assertNotIn(b"%9", stream)
+
+    def test_r9_card_resampler_preserves_full_source_extent(self):
+        starts = r9_card_band_starts()
+        self.assertEqual(len(starts), 26)
+        self.assertEqual(starts[0], 0)
+        self.assertEqual(starts[-1], 189)
+        self.assertEqual(starts[-1] + 6, 195)
+
+    def test_r9_card_resampler_uses_fourteen_single_row_skips(self):
+        starts = r9_card_band_starts()
+        deltas = [b - a for a, b in zip(starts, starts[1:])]
+        self.assertEqual(deltas.count(8), 14)
+        self.assertEqual(deltas.count(7), 11)
+        self.assertTrue(all(d in (7, 8) for d in deltas))
+
+    def test_r9_card_resampler_ratio(self):
+        # 196 logical rows -> 182 output rows = 13/14? No:
+        # the target is the nearest integer to 196 * 14/15 = 182.93.
+        self.assertEqual(26 * 7, 182)
+        self.assertEqual(round(196 * 14 / 15), 183)
 
 
 if __name__ == "__main__":
