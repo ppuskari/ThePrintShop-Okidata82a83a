@@ -412,6 +412,25 @@ def main() -> int:
                 break
     print()
 
+    print("=== DIRECT LF OUTPUT SITES ===")
+    for d, img in enumerate(images, 1):
+        for e in catalog(img):
+            if not e["name"].upper().endswith(".S"):
+                continue
+            txt = decode(file_sectors(img, e))
+            lines = txt.splitlines()
+            for i, line in enumerate(lines):
+                if re.search(r"LDA\s+#\$?0A\b", line, re.I):
+                    lo = max(0, i - 8)
+                    hi = min(len(lines), i + 12)
+                    block = "\n".join(lines[i:hi])
+                    if re.search(r"\bCOUT1\b", block, re.I):
+                        print(f"--- D{d} {e['name']} line {i + 1} ---")
+                        for j in range(lo, hi):
+                            print(f"{j + 1:5d}: {lines[j]}")
+                        print()
+    print()
+
     print("=== POSSIBLE DOUBLE-FEED / PRINT-START SITES ===")
     for d, img in enumerate(images, 1):
         for e in catalog(img):
