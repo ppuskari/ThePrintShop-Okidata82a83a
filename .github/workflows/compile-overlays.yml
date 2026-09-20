@@ -49,6 +49,9 @@ jobs:
           Path("build/MENUS7.ORIG.S").write_text(
               binary_source_text(d2, "MENUS7.S"), encoding="ascii"
           )
+          Path("build/GCDRAW.ORIG.S").write_text(
+              binary_source_text(d2, "GCDRAW.S"), encoding="ascii"
+          )
 
           def normalize_bigmac(text):
               # Merlin32 accepts ordinary Big Mac syntax, but punctuation
@@ -76,6 +79,8 @@ jobs:
           savify("build/PRCOMS.OKI.S",  "build/PRCOMS.OKI.BUILD.S",  "PRCOMS.OKI")
           savify("build/MENUS7.ORIG.S", "build/MENUS7.ORIG.BUILD.S", "MENUS7.ORIG")
           savify("build/MENUS7.OKI.S",  "build/MENUS7.OKI.BUILD.S",  "MENUS7.OKI")
+          savify("build/GCDRAW.ORIG.S", "build/GCDRAW.ORIG.BUILD.S", "GCDRAW.ORIG")
+          savify("build/GCDRAW.OKI.S",  "build/GCDRAW.OKI.BUILD.S",  "GCDRAW.OKI")
           PY
 
       - name: Assemble original and patched overlays
@@ -85,12 +90,15 @@ jobs:
           ./merlin32-bin PRCOMS.OKI.BUILD.S
           ./merlin32-bin MENUS7.ORIG.BUILD.S
           ./merlin32-bin MENUS7.OKI.BUILD.S
+          ./merlin32-bin GCDRAW.ORIG.BUILD.S
+          ./merlin32-bin GCDRAW.OKI.BUILD.S
           echo "=== OVERLAY OUTPUTS ==="
-          ls -l PRCOMS.ORIG PRCOMS.OKI MENUS7.ORIG MENUS7.OKI
-          sha256sum PRCOMS.ORIG PRCOMS.OKI MENUS7.ORIG MENUS7.OKI
+          ls -l PRCOMS.ORIG PRCOMS.OKI MENUS7.ORIG MENUS7.OKI GCDRAW.ORIG GCDRAW.OKI
+          sha256sum PRCOMS.ORIG PRCOMS.OKI MENUS7.ORIG MENUS7.OKI GCDRAW.ORIG GCDRAW.OKI
           echo "=== BYTE DIFFERENCES ==="
           cmp -l PRCOMS.ORIG PRCOMS.OKI | head -40 || true
           cmp -l MENUS7.ORIG MENUS7.OKI | head -80 || true
+          cmp -l GCDRAW.ORIG GCDRAW.OKI | head -80 || true
 
       - name: Inspect Print Shop v2.035 production image
         if: always()
@@ -123,7 +131,7 @@ jobs:
             echo
             echo "=== CANDIDATE: $img ==="
             build/ac -ll "$img" || true
-            for mod in PRCOMS MENUS7; do
+            for mod in PRCOMS MENUS7 GCDRAW; do
               out="build/runtime-$tag-$mod"
               rm -f "$out"
               if build/ac -g "$img" "$mod" "$out" 2>/dev/null; then
@@ -132,8 +140,10 @@ jobs:
                 sha256sum "$out"
                 if [ "$mod" = "PRCOMS" ]; then
                   cmp -l build/PRCOMS.ORIG "$out" | head -20 || true
-                else
+                elif [ "$mod" = "MENUS7" ]; then
                   cmp -l build/MENUS7.ORIG "$out" | head -20 || true
+                else
+                  cmp -l build/GCDRAW.ORIG "$out" | head -20 || true
                 fi
               fi
             done
@@ -159,4 +169,6 @@ jobs:
             build/PRCOMS.OKI
             build/MENUS7.ORIG
             build/MENUS7.OKI
+            build/GCDRAW.ORIG
+            build/GCDRAW.OKI
           if-no-files-found: warn
