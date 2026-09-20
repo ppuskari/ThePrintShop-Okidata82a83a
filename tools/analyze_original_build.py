@@ -412,6 +412,22 @@ def main() -> int:
                 break
     print()
 
+    print("=== GCDRAW FIRST-ROW STATE / CREDBUF / SIDE ===")
+    for d, img in enumerate(images, 1):
+        for e in catalog(img):
+            if e["name"].upper() != "GCDRAW.S":
+                continue
+            lines = decode(file_sectors(img, e)).splitlines()
+            for i, line in enumerate(lines):
+                up = line.upper()
+                if "CREDBUF" in up or re.match(r"^DUMP2\b", line, re.I) or re.match(r"^ROW\b", line, re.I) or "SIDE" in up:
+                    lo=max(0,i-6); hi=min(len(lines),i+14)
+                    print(f"--- D{d} {e['name']} line {i+1} ---")
+                    for j in range(lo,hi):
+                        print(f"{j+1:5d}: {lines[j]}")
+                    print()
+    print()
+
     print("=== INITFLAG REFERENCES ===")
     for d, img in enumerate(images, 1):
         for e in catalog(img):
