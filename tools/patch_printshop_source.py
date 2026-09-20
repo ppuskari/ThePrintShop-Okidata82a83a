@@ -101,13 +101,13 @@ CRLF2 LDA #$0A
  JSR COUT1
  DEY
  BPL CRLF2
+ BMI CRLFX
 *
 * OKIGRAPH I TYPE-5 CR/LF - R7
-* FIX80: 0=text, 1=graphics, 2=graphics primed by X=7.
+* R5 continuous graphics, no ESC % 9, suppress LF36.
 *
 CRLF5 LDA FIX80
- CMP #01
- BNE CRLF5T
+ BEQ CRLF5T
  CPX #00
  BNE CRLF5E
  CPY #00
@@ -119,39 +119,21 @@ CRLF5G LDA #03
  DEY
  BNE CRLF5G
  JMP CRLFX
-CRLF5E JSR GEXIT
-CRLF5T CPX #00
- BEQ CRLF5R
- CPX #07
- BEQ CRLF5P
- LDA #00
- BEQ CRLF5Q
-CRLF5P LDA #02
-CRLF5Q STA FIX80
-CRLF5R LDA #$0D
+CRLF5E LDA #03
+ JSR COUTRAW
+ LDA #02
+ JSR COUTRAW
+ DEC FIX80
+CRLF5T LDA #$0D
  JSR COUTRAW
  DEY
  BMI CRLFX
  CPX #02
  BEQ CRLFX
- LDA FIX80
- CMP #02
- BEQ CRLF5B
 CRLF5L LDA #$0A
  JSR COUTRAW
  DEY
  BPL CRLF5L
- BMI CRLFX
-CRLF5B LDA #01
- STA FIX80
- LDA #03
- JSR COUTRAW
-CRLF5BG LDA #03
- JSR COUTRAW
- LDA #$0E
- JSR COUTRAW
- DEY
- BPL CRLF5BG
 CRLFX TXA
  PHA
  JSR UPLRK
@@ -174,10 +156,8 @@ SGC5_NEW = """SGC5 STX TEMPLO
  LDA #00
  STA GCINDEX
  LDA FIX80
- CMP #01
- BEQ SGC5X
- LDA #01
- STA FIX80
+ BNE SGC5X
+ INC FIX80
  LDA #03
  JMP COUTRAW
 SGC5X RTS"""
@@ -199,22 +179,17 @@ COUT1_OLD = re.compile(
     r"^COUT1A LDX PITYPE\n"
 )
 
-COUT1_NEW = """GEXIT LDA #03
- JSR COUTRAW
- LDA #02
- JSR COUTRAW
- LDA #00
- STA FIX80
- RTS
-*
-COUT1 PHA
+COUT1_NEW = """COUT1 PHA
  LDA PRTYPE
  CMP #05
  BNE COUT1N
  LDA FIX80
- CMP #01
- BNE COUT1N
- JSR GEXIT
+ BEQ COUT1N
+ LDA #03
+ JSR COUTRAW
+ LDA #02
+ JSR COUTRAW
+ DEC FIX80
 COUT1N PLA
 COUTRAW STX XTEMP
  STY YTEMP
@@ -239,8 +214,6 @@ MENUS_INIT_NEW = """ JSR GSELECT
  STA PRTYPE
  LDA #00
  STA $B9
- LDA #$18
- STA $BC
  LDA RETFLAG"""
 
 
@@ -362,7 +335,13 @@ def patch_prcoms(text: str) -> str:
 def patch_menus(text: str) -> str:
     if len(OLD_MENU) != len(NEW_MENU):
         raise AssertionError("menu replacement must remain length-preserving")
-    return replace_once(text, OLD_MENU, NEW_MENU, "MENUS7.S printer label")
+    patched = replace_once(text, OLD_MENU, NEW_MENU, "MENUS7.S printer label")
+    return replace_once(
+        patched,
+        MENUS_INIT_OLD,
+        MENUS_INIT_NEW,
+        "MENUS7.S type-5 state initialization",
+    )
 
 
 def load_image(path: pathlib.Path | None, disk_index: int) -> bytes:
@@ -476,7 +455,11 @@ def write_patched_disks(
         or "COUTRAW STX XTEMP\n" not in rt1
     ):
         raise RuntimeError("generated source disk 1 does not contain the OkiGraph GC5 patch")
-    if NEW_MENU not in rt2 or OLD_MENU in rt2:
+    if (
+        NEW_MENU not in rt2
+        or OLD_MENU in rt2
+        or " STA $B9\n" not in rt2
+    ):
         raise RuntimeError(
             "generated source disk 2 does not contain the OkiGraph menu/init patch"
         )
@@ -521,10 +504,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R7 type-5 state: exact 0/1 validation inside PRCOMS")
-    print("  R7 normal/first band feed: native $03 $0E in graphics")
-    print("  R7 boundary motion: ordinary LF for X=12; suppress LF36 X=2")
-    print("  R7 state: FIX80 0=text, 1=graphics, 2=primed")
+    print("  R7 state: FIX80 initialized to text at printer selection")
+    print("  R7 normal band feed: native $03 $0E in continuous graphics")
+    print("  R7 boundary motion: ordinary LF except suppressed LF36 X=2")
+    print("  R7 legacy ESC % 9 path: not used")
     print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
