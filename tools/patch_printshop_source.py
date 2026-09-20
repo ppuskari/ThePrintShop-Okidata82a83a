@@ -89,8 +89,8 @@ CRLF_OLD = re.compile(
     r"^SETLFX RTS$"
 )
 
-CRLF_NEW = """CRLF LDY $95F1
- CPY #05
+CRLF_NEW = """CRLF LDA PRTYPE
+ CMP #05
  BEQ CRLF5
  LDA #$0D
  JSR COUT1
@@ -180,7 +180,7 @@ COUT1_OLD = re.compile(
 )
 
 COUT1_NEW = """COUT1 PHA
- LDA $95F1
+ LDA PRTYPE
  CMP #05
  BNE COUT1N
  LDA FIX80
@@ -268,8 +268,8 @@ DUMP0B STA ROWCNT
  LDA SIDE
  CMP #02
  BEQ DUMP0S
- LDA $95F1
- CMP #05
+ LDY $95F1
+ CPY #05
  BNE DUMP1
  DEC ROWCNT
  DEC ROWCNT
@@ -307,20 +307,16 @@ SR08A DEC ROWCNT
  BNE SR09
  RTS"""
 
-
 GCDRAW_HELPER_OLD = """ BCS SR02
 *
 GCNUMH HEX 040204"""
 
 GCDRAW_HELPER_NEW = """ BCS SR02
 *
-* R9 TYPE-5 CARD SOURCE-ROW RESAMPLER.
+* R9A TYPE-5 CARD SOURCE-ROW RESAMPLER.
 * X=0/2 SELECTS + / - SOURCE DIRECTION.
 *
-R9MOVE LDA $95F1
- CMP #05
- BNE R9MN
- LDA SIDE
+R9MOVE LDA SIDE
  CMP #02
  BEQ R9MN
  LDA ROWCNT
@@ -343,6 +339,7 @@ R9HI HEX 0102FEFE
 GCNUMH HEX 040204"""
 
 
+
 def patch_gcdraw(text: str) -> str:
     patched = replace_once(
         text,
@@ -354,19 +351,19 @@ def patch_gcdraw(text: str) -> str:
         patched,
         GCDRAW_ROWCOUNT_OLD,
         GCDRAW_ROWCOUNT_NEW,
-        "GCDRAW.S monochrome card row-count block",
+        "GCDRAW.S type-5 card row count",
     )
     patched = replace_once(
         patched,
         GCDRAW_MOVE_OLD,
         GCDRAW_MOVE_NEW,
-        "GCDRAW.S type-5 card row-resample move",
+        "GCDRAW.S type-5 card source stepping",
     )
     return replace_once(
         patched,
         GCDRAW_HELPER_OLD,
         GCDRAW_HELPER_NEW,
-        "GCDRAW.S monochrome card row-resample helper",
+        "GCDRAW.S type-5 card row resampler",
     )
 
 def sha256_text(text: str) -> str:
@@ -659,10 +656,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R9 PRCOMS core: proven R7/R8 continuous graphics")
-    print("  R9 GCDRAW: R8 first-row/piece-boundary behavior retained")
-    print("  R9 mono card: 28 source bands resampled to 26 output bands")
-    print("  R9 resampler: 14 single source-row skips preserve first/last row")
+    print("  R9A PRCOMS/MENUS7: exact validated R8 binaries")
+    print("  R9A GCDRAW: R8 DUMP boundary behavior retained")
+    print("  R9A mono type-5 card: 28 source bands -> 26 output bands")
+    print("  R9A SIDE register preserved while checking printer type")
     print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
