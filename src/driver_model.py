@@ -4,10 +4,6 @@ ETX = 0x03
 EXIT_GRAPHICS = 0x02
 GRAPHICS_LF_CR = 0x0E
 
-TEXT = 0
-GRAPHICS = 1
-PRIMED = 2
-
 
 def reverse7(value: int) -> int:
     value &= 0x7F
@@ -32,48 +28,33 @@ def encode_columns(source: bytes) -> bytes:
     )
 
 
-def crlf_r7(*, state: int, x_72: int, y_count: int) -> tuple[bytes, int]:
-    """Model the compact R7 type-5 CRLF state machine.
+def crlf_r7(*, in_graphics: bool, x_72: int, y_count: int) -> tuple[bytes, bool]:
+    """Compact R7 type-5 control path based on hardware-proven R5.
 
-    State:
-      0 text
-      1 graphics
-      2 graphics-primed by Print Shop X=7 setup
-
-    No legacy ESC % 9 sequence is emitted.
+    * Active graphics + X=0,Y>0: native graphics feed+CR; remain in graphics.
+    * Other calls exit graphics first, then return carriage.
+    * X=2 is Print Shop LF36 and is suppressed instead of overfeeding 1/6 inch.
+    * Other text/boundary Y advances use ordinary LF.
+    * No ESC % 9 sequence is emitted.
     """
-    if state not in (TEXT, GRAPHICS, PRIMED):
-        state = TEXT
     if x_72 < 0 or y_count < 0:
         raise ValueError("X and Y must be non-negative")
 
     out = bytearray()
 
-    if state == GRAPHICS:
-        if x_72 == 0 and y_count > 0:
-            for _ in range(y_count):
-                out += bytes([ETX, GRAPHICS_LF_CR])
-            return bytes(out), GRAPHICS
-        out += bytes([ETX, EXIT_GRAPHICS])
-        state = TEXT
+    if in_graphics and x_72 == 0 and y_count > 0:
+        for _ in range(y_count):
+            out += bytes([ETX, GRAPHICS_LF_CR])
+        return bytes(out), True
 
-    if x_72:
-        state = PRIMED if x_72 == 7 else TEXT
+    if in_graphics:
+        out += bytes([ETX, EXIT_GRAPHICS])
+        in_graphics = False
 
     out.append(0x0D)
 
-    if y_count == 0:
-        return bytes(out), state
-
-    if x_72 == 2:
-        return bytes(out), state
-
-    if state == PRIMED:
-        state = GRAPHICS
-        out.append(ETX)
-        for _ in range(y_count):
-            out += bytes([ETX, GRAPHICS_LF_CR])
-        return bytes(out), state
+    if y_count == 0 or x_72 == 2:
+        return bytes(out), in_graphics
 
     out += bytes([0x0A]) * y_count
-    return bytes(out), state
+    return bytes(out), in_graphics
