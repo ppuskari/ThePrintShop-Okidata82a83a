@@ -113,6 +113,31 @@ def main() -> int:
         print()
     print()
 
+    print("=== GCDRAW BLANK/TRIM AND COUNT TABLES ===")
+    text = get_file(images[1], "GCDRAW.S")
+    lines = text.splitlines()
+    pats = (
+        r"^BLANKS\b", r"^BLANK", r"GCNUM", r"^SENDGB\b",
+        r"^SR0[1234]\b", r"RHALF", r"BUFPTR", r"BLANKCK"
+    )
+    hit_indexes = []
+    for i, line in enumerate(lines):
+        if any(re.search(p, line, re.I) for p in pats):
+            hit_indexes.append(i)
+    shown = set()
+    for i in hit_indexes:
+        lo = max(0, i - 10)
+        hi = min(len(lines), i + 18)
+        key = (lo, hi)
+        if any(lo >= a and hi <= b for a,b in shown):
+            continue
+        shown.add(key)
+        print(f"--- GCDRAW.S around line {i + 1} ---")
+        for j in range(lo, hi):
+            print(f"{j + 1:5d}: {lines[j]}")
+        print()
+    print()
+
     print("=== GCDRAW CRLF CONTEXTS ===")
     text = get_file(images[1], "GCDRAW.S")
     lines = text.splitlines()
