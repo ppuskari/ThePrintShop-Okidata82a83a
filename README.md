@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R8 executable disk build: implemented and CI-validated; physical printer validation is next.**
+**R9 executable disk build: implemented and CI-validated; physical printer validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -67,33 +67,30 @@ It creates:
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 ```
 
-Current R8 validated image:
+Current R9 validated image:
 
 ```
 size   143360 bytes
-SHA256 fc0c54c0d457845e27cc259429e36ce1604684df6bb22eabbe63f270669de92b
+SHA256 29d2eae0d4f0eb3c221be125fc705b2cbcbcbef104fabefb990b3525a642d08d
 ```
 
-R7 physical testing established that the remaining repeatable micro-feed
-occurs at the greeting-card piece boundary correlated with the on-screen
-`THINKING -> PRINTING` transition. Source tracing showed that the screen
-routines themselves do not touch the printer. The cause is inside `DUMP`:
-each piece performs an `X=7,Y=0` setup and then an `X=0,Y=1` first-row
-advance.
+R8 removed the repeatable first-row/piece-boundary feed and left the remaining
+vertical error almost entirely systematic. Hardware measurement matched the
+known pitch ratio: Print Shop assumes 14/144 inch between seven-row bands,
+while the firmware-backed OkiGraph feed is 15/144 inch.
 
-R8 keeps the proven R7 continuous-graphics PRCOMS path and patches the actual
-greeting-card/sign runtime overlay. The historical `GCDRAW.S` control build
-was proven byte-for-byte identical to runtime `DRAW1`
-(`$7800`, 2737 bytes), so the disk builder now verifies and patches that
-third executable overlay as well.
+For a monochrome greeting-card piece, R8 still emits 28 seven-row bands.
+R9 changes only type-5 card sides 0/1 to 26 output bands and resamples the
+original 196 source rows into 182 emitted rows. Rather than deleting two whole
+seven-row bands, the resampler distributes fourteen single source-row skips
+through the piece. Source row 0 is preserved, and the final output band starts
+at source row 189 so source row 195 is preserved as well.
 
-R8 enters OkiGraph graphics immediately after each DUMP setup. On the first
-outside-card DUMP it skips the historical first-row vertical feed so raster
-output begins at the physical print-head position. On later pieces the first
-row receives one native `$03 $0E` feed, matching normal in-piece bands rather
-than the ordinary text LF that caused the visible boundary jump.
+The resampler is gated by the shared printer-type byte at `$95F1`, so other
+Print Shop printer types retain their historical row count and stepping.
+Full-page signs (`SIDE=2`) also retain their historical geometry.
 
-Validated R8 overlays:
+Validated R9 overlays:
 
 ```
 PRCOMS.OKI
@@ -105,21 +102,12 @@ length 3018
 SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
 
 GCDRAW.OKI -> runtime DRAW1
-length 2762
-SHA256 c9d6a4f1242dbcae8f1bb6a3fe5b0445313521d1781baffbe6211b9abee324f8
+length 2809
+SHA256 f7691ec32ee74a4ad02a4ac2af9e10d56fa6a2bfd5d33ff24e26641e7dcabf6f
 ```
 
-The original runtime DRAW1 control is 2737 bytes with SHA256
-`cfa548eb4f950156c14639372f2681edbaa810e86f0945d73c24e0304e436353`.
-The expanded R8 overlay still fits its existing DOS allocation and remains
-below the application data beginning at `$8300`.
-
-A separate dimensional issue remains intentionally exposed: Print Shop's
-nominal seven-row pitch is 14/144 inch while the firmware-backed native
-OkiGraph feed is 15/144 inch. That predicts roughly 7.1% vertical stretch and
-matches the remaining 1/2-3/4 inch hardware observation. R8 isolates the
-piece-boundary error first; source-row resampling can address the scale after
-this build is measured.
+R9 DRAW1 still fits the original DOS allocation and remains below the
+application data beginning at `$8300`.
 
 The script uses an installed Merlin32 if available; otherwise it downloads
 the pinned v1.1.10 Windows build. It verifies the original runtime overlays
@@ -205,7 +193,7 @@ https://github.com/ppuskari/Okidata-Microline-82A-83A
 
 ## Next milestone
 
-Validate R8 on the physical 82A/83A with the head aligned to the intended
+Validate R9 on the physical 82A/83A with the head aligned to the intended
 top-of-page raster baseline. Confirm that the first graphics row no longer
 advances the paper and that the repeatable THINKING -> PRINTING piece-boundary
 micro-step is gone. Then measure the remaining vertical scale error and inspect
