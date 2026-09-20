@@ -102,20 +102,28 @@ CRLF2 LDA #$0A
  DEY
  BPL CRLF2
 *
-* OKIGRAPH I TYPE-5 CR/LF - R6
+* OKIGRAPH I TYPE-5 CR/LF - R7
 *
-* FIX80: 0=text, 1=graphics.
-* QL: cached Print Shop spacing, 2*X in 1/144-inch units.
+* FIX80 is exact graphics-state flag: 0=text, 1=graphics.
+* QL caches the most recent nonzero Print Shop X (1/72 inch).
+*
+* OkiGraph I does not use the legacy ML92/93 ESC % 9 spacing
+* path here.  Normal seven-dot rows use native graphics feed.
+* X=12 text/boundary motion uses the printer's ordinary LF,
+* which is the requested 12/72 = 1/6 inch.
+* X=2 (LF36 helper) is intentionally suppressed: no exact
+* 1/36-inch host command is firmware-backed, and zero error
+* is far smaller than substituting a full 1/6-inch LF.
 *
 CRLF5 TXA
  BEQ CRLF5S
- ASL
  STA QL
 CRLF5S LDA FIX80
- BEQ CRLF5T
- TXA
+ CMP #01
+ BNE CRLF5T
+ CPX #00
  BNE CRLF5E
- TYA
+ CPY #00
  BEQ CRLF5E
 CRLF5G LDA #03
  JSR COUTRAW
@@ -129,10 +137,26 @@ CRLF5T LDA #$0D
  JSR COUTRAW
  DEY
  BMI CRLFX
-CRLF5D JSR ESCOUT
- JSR SETLF5
+ LDA QL
+ CMP #07
+ BEQ CRLF5B
+ CMP #02
+ BEQ CRLFX
+CRLF5L LDA #$0A
+ JSR COUTRAW
  DEY
- BPL CRLF5D
+ BPL CRLF5L
+ BMI CRLFX
+CRLF5B LDA #01
+ STA FIX80
+ LDA #03
+ JSR COUTRAW
+CRLF5BG LDA #03
+ JSR COUTRAW
+ LDA #$0E
+ JSR COUTRAW
+ DEY
+ BPL CRLF5BG
 CRLFX TXA
  PHA
  JSR UPLRK
@@ -155,8 +179,10 @@ SGC5_NEW = """SGC5 STX TEMPLO
  LDA #00
  STA GCINDEX
  LDA FIX80
- BNE SGC5X
- INC FIX80
+ CMP #01
+ BEQ SGC5X
+ LDA #01
+ STA FIX80
  LDA #03
  JMP COUTRAW
 SGC5X RTS"""
@@ -169,7 +195,17 @@ GC5_END_OLD = re.compile(
     r"^GC5X PLA$"
 )
 
-GC5_END_NEW = """GC5X PLA"""
+GC5_END_NEW = """LDA GCINDEX
+ BEQ GC5X
+ LDA GCOLD
+ STX XTEMP
+ JSR REVBITS
+ ORA #$80
+ LDX XTEMP
+ JSR COUTRAW
+ LDA #00
+ STA GCINDEX
+GC5X PLA"""
 
 COUT1_OLD = re.compile(
     r"(?m)^COUT1 STX XTEMP\n"
@@ -182,7 +218,8 @@ COUT1_NEW = """GEXIT LDA #03
  JSR COUTRAW
  LDA #02
  JSR COUTRAW
- DEC FIX80
+ LDA #00
+ STA FIX80
  RTS
 *
 COUT1 PHA
@@ -190,7 +227,8 @@ COUT1 PHA
  CMP #05
  BNE COUT1N
  LDA FIX80
- BEQ COUT1N
+ CMP #01
+ BNE COUT1N
  JSR GEXIT
 COUT1N PLA
 COUTRAW STX XTEMP
@@ -324,19 +362,11 @@ def patch_prcoms(text: str) -> str:
             f"found {len(cout1_matches)}"
         )
 
-    setlf5_count = text.count(SETLF5_OLD)
-    if setlf5_count != 1:
-        raise RuntimeError(
-            "PRCOMS.S SETLF5 block: expected exactly one original block, "
-            f"found {setlf5_count}"
-        )
-
     patched = CRLF_OLD.sub(CRLF_NEW, text, count=1)
     patched = SGC5_OLD.sub(SGC5_NEW, patched, count=1)
     patched = GC5_OLD.sub(GC5_NEW, patched, count=1)
     patched = GC5_END_OLD.sub(GC5_END_NEW, patched, count=1)
     patched = COUT1_OLD.sub(COUT1_NEW, patched, count=1)
-    patched = patched.replace(SETLF5_OLD, SETLF5_NEW, 1)
 
     return patched
 
@@ -344,14 +374,7 @@ def patch_prcoms(text: str) -> str:
 def patch_menus(text: str) -> str:
     if len(OLD_MENU) != len(NEW_MENU):
         raise AssertionError("menu replacement must remain length-preserving")
-    patched = replace_once(text, OLD_MENU, NEW_MENU, "MENUS7.S printer label")
-    patched = replace_once(
-        patched,
-        MENUS_INIT_OLD,
-        MENUS_INIT_NEW,
-        "MENUS7.S type-5 state initialization",
-    )
-    return patched
+    return replace_once(text, OLD_MENU, NEW_MENU, "MENUS7.S printer label")
 
 
 def load_image(path: pathlib.Path | None, disk_index: int) -> bytes:
@@ -465,13 +488,7 @@ def write_patched_disks(
         or "COUTRAW STX XTEMP\n" not in rt1
     ):
         raise RuntimeError("generated source disk 1 does not contain the OkiGraph GC5 patch")
-    if (
-        NEW_MENU not in rt2
-        or OLD_MENU in rt2
-        or " STA $B9\n" not in rt2
-        or " LDA #$18\n" not in rt2
-        or " STA $BC\n" not in rt2
-    ):
+    if NEW_MENU not in rt2 or OLD_MENU in rt2:
         raise RuntimeError(
             "generated source disk 2 does not contain the OkiGraph menu/init patch"
         )
@@ -516,9 +533,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R6 type-5 state: initialized at printer selection")
-    print("  R6 normal band feed: native $03 $0E in continuous graphics")
-    print("  R6 boundary feed: direct ESC % 9 cached spacing, no extra LF")
+    print("  R7 type-5 state: exact 0/1 validation inside PRCOMS")
+    print("  R7 normal/first band feed: native $03 $0E in graphics")
+    print("  R7 boundary motion: ordinary LF for X=12; suppress LF36 X=2")
+    print("  R7 odd SENDGC count: flush final unpaired source column")
     print("  graphics data: reverse7(pair OR) | $80")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
