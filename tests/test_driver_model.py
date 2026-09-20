@@ -5,15 +5,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from driver_model import (  # noqa: E402
-    GRAPHICS,
-    PRIMED,
-    TEXT,
-    crlf_r7,
-    encode_columns,
-    encode_pair,
-    reverse7,
-)
+from driver_model import crlf_r7, encode_columns, encode_pair, reverse7  # noqa: E402
 
 
 class DriverModelTests(unittest.TestCase):
@@ -41,48 +33,38 @@ class DriverModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             encode_columns(b"\x01")
 
-    def test_r7_x7_setup_primes_without_feeding(self):
-        stream, state = crlf_r7(state=TEXT, x_72=7, y_count=0)
-        self.assertEqual(stream, b"\x0d")
-        self.assertEqual(state, PRIMED)
-
-    def test_r7_first_band_enters_graphics_and_native_feeds(self):
-        stream, state = crlf_r7(state=PRIMED, x_72=0, y_count=1)
-        self.assertEqual(stream, b"\x0d\x03\x03\x0e")
-        self.assertEqual(state, GRAPHICS)
-
-    def test_r7_normal_band_stays_in_graphics(self):
-        stream, state = crlf_r7(state=GRAPHICS, x_72=0, y_count=1)
+    def test_r7_active_graphics_band_stays_open(self):
+        stream, state = crlf_r7(in_graphics=True, x_72=0, y_count=1)
         self.assertEqual(stream, b"\x03\x0e")
-        self.assertEqual(state, GRAPHICS)
+        self.assertTrue(state)
 
     def test_r7_one_sixth_boundary_exits_then_plain_lf(self):
-        stream, state = crlf_r7(state=GRAPHICS, x_72=12, y_count=1)
+        stream, state = crlf_r7(in_graphics=True, x_72=12, y_count=1)
         self.assertEqual(stream, b"\x03\x02\x0d\x0a")
-        self.assertEqual(state, TEXT)
+        self.assertFalse(state)
         self.assertNotIn(b"%9", stream)
 
     def test_r7_lf36_is_suppressed(self):
-        stream, state = crlf_r7(state=GRAPHICS, x_72=2, y_count=1)
+        stream, state = crlf_r7(in_graphics=True, x_72=2, y_count=1)
         self.assertEqual(stream, b"\x03\x02\x0d")
-        self.assertEqual(state, TEXT)
+        self.assertFalse(state)
         self.assertNotIn(0x0A, stream)
         self.assertNotIn(b"%9", stream)
 
-    def test_r7_stale_state_is_treated_as_text(self):
-        stream, state = crlf_r7(state=99, x_72=12, y_count=1)
+    def test_r7_text_first_row_uses_plain_lf(self):
+        stream, state = crlf_r7(in_graphics=False, x_72=0, y_count=1)
         self.assertEqual(stream, b"\x0d\x0a")
-        self.assertEqual(state, TEXT)
+        self.assertFalse(state)
 
     def test_r7_never_emits_legacy_spacing_sequence(self):
         for state, x, y in [
-            (TEXT, 7, 0),
-            (PRIMED, 0, 1),
-            (GRAPHICS, 0, 1),
-            (GRAPHICS, 12, 1),
-            (GRAPHICS, 2, 1),
+            (False, 7, 0),
+            (False, 0, 1),
+            (True, 0, 1),
+            (True, 12, 1),
+            (True, 2, 1),
         ]:
-            stream, _ = crlf_r7(state=state, x_72=x, y_count=y)
+            stream, _ = crlf_r7(in_graphics=state, x_72=x, y_count=y)
             self.assertNotIn(b"%9", stream)
 
 
