@@ -56,23 +56,9 @@ def main() -> int:
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
     plines = prcoms_orig.splitlines()
-    print("=== R17 PRCOMS SETLF/CRLF context ===")
-    for i, line in enumerate(plines):
-        if "SETLF" in line.upper() or line.strip().upper().startswith("CRLF"):
-            lo = max(0, i - 8)
-            hi = min(len(plines), i + 16)
-            print(f"--- PRCOMS lines {lo + 1}-{hi} ---")
-            for j in range(lo, hi):
-                print(f"{j + 1:04d}: {plines[j]}")
-
-    # TEMP R17 investigation: expose original card vertical geometry.
-    glines = gcdraw_orig.splitlines()
-    print("=== R17 GCDRAW card-control block 210-305 ===")
-    for j in range(209, min(len(glines), 305)):
-        print(f"{j + 1:04d}: {glines[j]}")
-    print("=== R17 GCDRAW raster/control block 1340-1510 ===")
-    for j in range(1339, min(len(glines), 1510)):
-        print(f"{j + 1:04d}: {glines[j]}")
+    print("=== R17 PRCOMS lines 1-190 ===")
+    for j in range(0, min(len(plines), 190)):
+        print(f"{j + 1:04d}: {plines[j]}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
