@@ -251,22 +251,14 @@ GCDRAW_DUMP_NEW = """DUMP2 STX BADDR
  LDY #00
  JSR SENDGC
  LDX CREDBUF-1
- BEQ R13FIRST
+ BEQ ROW
  DEX
  BNE ROW
  INC CREDBUF-1
  BNE ROW0
-R13FIRST LDA PIECE
- CLC
- ADC YMAX
- CMP #$88
- BNE ROW
- LDY #02
- BNE R16ROW
-*
 ROW LDX #00
  LDY #01
-R16ROW JSR CRLF
+ JSR CRLF
 ROW0 LDA COLORPR"""
 
 GCDRAW_ROWCOUNT_OLD = """DUMP0A LDA #28
@@ -371,6 +363,23 @@ R9HI HEX 0102FEFE
 *
 GCNUMH HEX 040204"""
 
+GCDRAW_LF36_OLD = """LF36A LDX #02
+ LDY SIDE
+ BNE LF36B
+ INY
+LF36B JMP CRLF"""
+
+GCDRAW_LF36_NEW = """LF36A LDX #02
+ LDY SIDE
+ BEQ R20S0
+ CPY #01
+ BNE LF36B
+ DEX
+ DEX
+ BEQ LF36B
+R20S0 INY
+LF36B JMP CRLF"""
+
 
 
 def patch_gcdraw(text: str) -> str:
@@ -403,6 +412,12 @@ def patch_gcdraw(text: str) -> str:
         GCDRAW_MOVE_OLD,
         GCDRAW_MOVE_NEW,
         "GCDRAW.S type-5 card source stepping",
+    )
+    patched = replace_once(
+        patched,
+        GCDRAW_LF36_OLD,
+        GCDRAW_LF36_NEW,
+        "GCDRAW.S native fold feed",
     )
     return replace_once(
         patched,
@@ -701,10 +716,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R16 OkiGraph driver: exact hardware-good R11 PRCOMS behavior")
-    print("  R16 base GCDRAW: remove R12's three LF36-padding NOP bytes")
-    print("  R16 first physical card raster: two native OkiGraph graphics feeds")
-    print("  R16 later rows/fold/inter-piece positioning: unchanged")
+    print("  R20 base: hardware-good R16 PRCOMS; SETLF5 stays disabled")
+    print("  R20 top: one native 15/144 OkiGraph feed instead of two")
+    print("  R20 fold: one native 15/144 feed only after SIDE=1 panel")
+    print("  R20 all half-panel joins and SIDE=0/SIDE=2 behavior otherwise unchanged")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
