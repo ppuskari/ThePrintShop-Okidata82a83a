@@ -94,6 +94,13 @@ length 3018
 SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
 ```
 
+Validated R19 runtime image:
+
+```text
+size   143360 bytes
+SHA256 4d31c28eb85fc6e1e9d405e4f58a9e6c99cd02dafb4bf44b2d8e30e9a66fef5e
+```
+
 The R14 TEST PAPER POSITION CR-only patch and all horizontal/raster behavior
 remain unchanged.
 
