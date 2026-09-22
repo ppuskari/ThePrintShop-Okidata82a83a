@@ -56,14 +56,13 @@ def main() -> int:
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
     glines = gcdraw_orig.splitlines()
-    print("=== GCDRAW all CRLF call contexts ===")
+    print("=== GCDRAW entry/caller flow 80-190 ===")
+    for j in range(79, min(len(glines), 190)):
+        print(f"{j + 1:04d}: {glines[j]}")
+    print("=== all DOALL references ===")
     for i, line in enumerate(glines):
-        if "JSR CRLF" in line.upper() or "JMP CRLF" in line.upper():
-            lo = max(0, i - 8)
-            hi = min(len(glines), i + 5)
-            print(f"--- around line {i + 1} ---")
-            for j in range(lo, hi):
-                print(f"{j + 1:04d}: {glines[j]}")
+        if "DOALL" in line.upper():
+            print(f"{i + 1:04d}: {line}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
