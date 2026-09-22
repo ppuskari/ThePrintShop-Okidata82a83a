@@ -228,9 +228,6 @@ GCDRAW_START_OLD = """ LDA A2
 
 GCDRAW_START_NEW = """ LDA A2
  STA $60D1
- NOP
- NOP
- NOP
  LDX #00
  STX RETFLAG"""
 
@@ -258,7 +255,7 @@ GCDRAW_DUMP_NEW = """DUMP2 STX BADDR
  DEX
  BNE ROW
  INC CREDBUF-1
- JMP ROW0
+ BNE ROW0
 R13FIRST LDA PIECE
  CLC
  ADC YMAX
@@ -705,7 +702,7 @@ def main() -> int:
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
     print("  R16 OkiGraph driver: exact hardware-good R11 PRCOMS behavior")
-    print("  R16 base GCDRAW: retain R12 initial LF36 suppression")
+    print("  R16 base GCDRAW: remove R12's three LF36-padding NOP bytes")
     print("  R16 first physical card raster: two native OkiGraph graphics feeds")
     print("  R16 later rows/fold/inter-piece positioning: unchanged")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
