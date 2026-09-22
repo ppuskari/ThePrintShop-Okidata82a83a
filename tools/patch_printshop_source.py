@@ -263,7 +263,7 @@ R13FIRST LDA PIECE
  CLC
  ADC YMAX
  CMP #$88
- BEQ ROW0
+ BEQ ROW
 *
 ROW LDX #00
  LDY #01
@@ -702,10 +702,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R13 OkiGraph driver: exact hardware-good R11 PRCOMS behavior")
-    print("  R13 base GCDRAW: retain R12 initial LF36 suppression")
-    print("  R13 first raster row: suppress one-time ROW LF regardless of SIDE")
-    print("  R13 later rows/fold/inter-piece positioning: unchanged")
+    print("  R15 OkiGraph driver: exact hardware-good R11 PRCOMS behavior")
+    print("  R15 base GCDRAW: retain R12 initial LF36 suppression")
+    print("  R15 first physical card raster: one native OkiGraph graphics feed")
+    print("  R15 later rows/fold/inter-piece positioning: unchanged")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
