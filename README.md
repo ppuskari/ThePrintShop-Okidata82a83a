@@ -64,17 +64,17 @@ R13FIRST LDA PIECE
  CMP #$88
  BNE ROW
  LDY #02
- BNE ROW1
+ BNE R16ROW
 *
 ROW LDX #00
  LDY #01
-ROW1 JSR CRLF
+R16ROW JSR CRLF
 ROW0 LDA COLORPR
 ```
 
 On the first-pane condition, X is already zero from `LDX CREDBUF-1 / BEQ`,
 so the special path can skip `LDX #00`.  `LDY #02` clears Z, making the
-`BNE ROW1` unconditional.  Other cases fall through the normal
+`BNE R16ROW` unconditional.  Other cases fall through the normal
 `LDX #00 / LDY #01` row path.
 
 R16 GCDRAW/DRAW1 is expected to assemble to exactly 2816 bytes:
