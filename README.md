@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R16 two-native-feed first-raster experiment: implemented; hardware validation is next.**
+**R20 native-only top/fold experiment: CI-validated; hardware validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,61 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R20 native-only top and fold adjustment
+
+R17-R19 demonstrated on hardware that re-enabling the historical type-5
+`ESC % 9 n` spacing path is not safe for this OkiGraph I driver.  The
+hardware symptoms included stray dot output, internal panel gaps, and a
+runaway feed sequence.  R20 therefore rebases directly from R16 and keeps
+`SETLF5` disabled exactly as in the hardware-good R11-R16 path.
+
+R20 uses only the native OkiGraph graphics feed already proven on hardware:
+
+```text
+$03 $0E = 15/144 inch = 2.646 mm
+```
+
+The first physical card raster now takes one native graphics feed rather than
+R16's two.  That moves the first printed border upward by exactly 15/144 inch
+(2.646 mm).
+
+At the true complete-panel transition, the existing `LF36` helper is changed
+only for `SIDE=1`: while graphics mode is still active it calls CRLF with
+X=0,Y=1, producing exactly one native `$03 $0E` feed.  The subsequent
+DOALL9 logic then exits graphics normally.  `SIDE=0` retains the R16
+zero-feed behavior, and `SIDE=2` (signs) retains its original path.
+
+This deliberately gives up the attempted 1.8-1.9 mm fine adjustment in favor
+of the smallest vertical quantum that is already proven safe on OkiGraph I.
+Because the same 15/144-inch amount is removed from the top and inserted at
+the fold, the lower complete panel should remain at essentially the same
+absolute page position as R16.
+
+Validated R20 overlays:
+
+```text
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+GCDRAW.OKI -> runtime DRAW1
+length 2807
+SHA256 aa1cd6a98049d447c179f18405a8de74ff4b587a56d4cbc9dfd210d651953aa9
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+```
+
+Validated R20 runtime image:
+
+```text
+size   143360 bytes
+SHA256 c9486cc9494317471a3f5cc2c73daaa6c93b6202d1ed56e293ee4ce0dc8c1e13
+```
+
+The R14 TEST PAPER POSITION CR-only patch remains unchanged.
 
 ## R16 first-card raster: two native OkiGraph feeds
 
