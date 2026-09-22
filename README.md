@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R16 two-native-feed first-raster experiment: implemented; hardware validation is next.**
+**R17 fine vertical card-centering experiment: CI-validated; hardware measurement is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,92 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R17 fine vertical card centering
+
+R17 uses the perforation-defined R14 paper-position test plus the R16
+caliper measurements to move the greeting-card geometry in deliberately
+small 1/144-inch increments.
+
+The important correction is that OkiGraph's historical `ESC % 9 n`
+programmable spacing is valid in text mode.  Earlier experiments sent that
+sequence while the printer was still in OkiGraph graphics state.  R17
+therefore restores the historical type-5 `SETLF5` implementation, while
+the type-5 `CRLF` path continues using native `$03 $0E` feeds whenever
+`FIX80` says graphics mode is active.  If a nonzero-X boundary call exits
+graphics, it then falls through to the normal text-mode spacing path.
+
+The top-of-card adjustment is:
+
+```text
+R16 startup:  30/144 in = two native graphics feeds
+R17 startup:   4/144 in = restored LF36 through ESC %9
+              15/144 in = one native graphics feed
+              ---------
+              19/144 in total
+
+R17 moves the top upward by 11/144 in = 1.940 mm.
+```
+
+At the normal `X=12` card-piece boundary, type 5 now uses `X=17`.
+Because `SETLF5` converts X/72-inch units to the Oki `n/144` value, that
+changes the boundary feed from 24/144 to 34/144 inch: an additional
+**10/144 inch = 1.764 mm** between vertical card panels.  Relative to R16,
+the lower panel therefore moves only 1/144 inch (0.176 mm) upward even though
+the top panel gains almost 2 mm of top margin.
+
+The end-of-card correction uses the two existing DOALL9 calls rather than
+adding another code path.  The restored LF36 contributes 4/144 inch, and the
+type-5 `X=12,Y=0` final boundary is normalized to `X=4,Y=1`, contributing
+another 8/144 inch.  Together with the 10/144-inch increase after the second
+panel, the end position advances by exactly:
+
+```text
+10/144 + 4/144 + 8/144 = 22/144 inch
+                         = 3.881 mm
+```
+
+That directly targets the measured 3.8-3.9 mm shortfall to the next
+perforation.
+
+The `X=12` normalization is inside the printer-type-5 branch only; other
+printer types do not receive those fine-spacing substitutions.  R17 does
+restore the original GCDRAW startup `JSR LF36` that R12 had globally
+suppressed, so non-type-5 printers return to the historical Print Shop
+startup behavior.
+
+R17 also removes the redundant `JMP SR08A` after `JSR R9MOVE`; execution
+already falls directly into `SR08A`.  This pays for the restored startup
+call without expanding DRAW1.
+
+Validated R17 overlays:
+
+```text
+PRCOMS.OKI
+length 2044
+SHA256 4861589b0480a3ea47d3b2913b179e7730f668f47b25e862898578071a57a678
+
+GCDRAW.OKI -> runtime DRAW1
+length 2808
+SHA256 140eab8c13a87c93fcc6cbfe622d1e3e5799de32ab9d1b89e93bdeb5f57c5ef0
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+```
+
+Validated R17 runtime image:
+
+```text
+size   143360 bytes
+SHA256 2eef4359713ac807e1795105625ecafa2324a20fc72bc01fd61fe4c7995a8731
+```
+
+PRCOMS's 2044-byte payload plus the four-byte DOS binary header exactly fills
+its existing 2048-byte on-disk allocation.  DRAW1 remains comfortably below
+the `$8300` application-data boundary.  The R14 CR-only TEST PAPER POSITION
+patch, graphics-byte escaping, source-row resampling, and horizontal geometry
+are unchanged.
 
 ## R16 first-card raster: two native OkiGraph feeds
 
@@ -304,11 +390,11 @@ It creates:
 build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
 ```
 
-Current R13 validated image:
+Current R17 validated image:
 
 ```
 size   143360 bytes
-SHA256 3eef3ef4660483bce6681f939fc3f1409ac533319efc9d332407e0c57c152bc1
+SHA256 2eef4359713ac807e1795105625ecafa2324a20fc72bc01fd61fe4c7995a8731
 ```
 
 R6 was physically validated and was the closest result yet: the total vertical
@@ -428,10 +514,12 @@ https://github.com/ppuskari/Okidata-Microline-82A-83A
 
 ## Next milestone
 
-Validate the R7 disk on the physical 82A/83A. The specific targets are removal
-of the stray control/text output at graphics transitions, elimination of the
-extra vertical gap between seven-dot bands, and restoration of one-page layout.
+Measure the R17 greeting-card output on physical OkiGraph-equipped ML82A/83A
+hardware from an R14 perforation-aligned start.  Record top border-to-
+perforation distance, the vertical panel gap, bottom border-to-perforation
+distance, and the post-print TEST PAPER POSITION dot offset at the next
+perforation.
 
-If R3 validates the corrected carriage-return and native graphics-feed path,
-the next source build can preserve the original 92/93 driver as type 5 and add
-**82A/83A OkiGraph I as a distinct printer type 10**.
+After card geometry is frozen, validate signs and stationery, then restore the
+stock Okidata 92/93 menu entry and add **82A/83A OkiGraph I** as a distinct
+printer selection.
