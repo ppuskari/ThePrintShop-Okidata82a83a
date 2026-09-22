@@ -93,22 +93,8 @@ CRLF_OLD = re.compile(
 
 CRLF_NEW = """CRLF LDA PRTYPE
  CMP #05
- BEQ CRLF5
- LDA #$0D
- JSR COUT1
- JSR SETLF
- DEY
- BMI CRLFX
-CRLF2 LDA #$0A
- JSR COUT1
- DEY
- BPL CRLF2
- BMI CRLFX
-*
-* OKIGRAPH I TYPE-5 CR/LF - R8 PRCOMS CORE
-* Continuous graphics from R7; DUMP boundary handling is in GCDRAW.
-*
-CRLF5 LDA FIX80
+ BNE CRLFN
+ LDA FIX80
  BEQ CRLF5T
  CPX #00
  BNE CRLF5E
@@ -126,16 +112,21 @@ CRLF5E LDA #03
  LDA #02
  JSR COUTRAW
  DEC FIX80
-CRLF5T LDA #$0D
- JSR COUTRAW
+CRLF5T CPX #12
+ BNE CRLFN
+ LDX R17XTBL,Y
+ LDY #01
+CRLFN LDA #$0D
+ JSR COUT1
+ JSR SETLF
  DEY
  BMI CRLFX
- CPX #02
- BEQ CRLFX
-CRLF5L LDA #$0A
- JSR COUTRAW
+CRLF2 LDA #$0A
+ JSR COUT1
  DEY
- BPL CRLF5L
+ BPL CRLF2
+ BMI CRLFX
+R17XTBL DFB 4,17
 CRLFX TXA
  PHA
  JSR UPLRK
@@ -206,7 +197,7 @@ SETLF5_OLD = """SETLF5 LDA #'%'
  TXA
  ASL
  JMP COUT1"""
-SETLF5_NEW = """SETLF5 RTS"""
+SETLF5_NEW = SETLF5_OLD
 
 MENUS_INIT_OLD = """ JSR GSELECT
  STA PRTYPE
@@ -228,6 +219,7 @@ GCDRAW_START_OLD = """ LDA A2
 
 GCDRAW_START_NEW = """ LDA A2
  STA $60D1
+ JSR LF36
  LDX #00
  STX RETFLAG"""
 
@@ -260,13 +252,11 @@ R13FIRST LDA PIECE
  CLC
  ADC YMAX
  CMP #$88
- BNE ROW
- LDY #02
- BNE R16ROW
+ BEQ ROW0
 *
 ROW LDX #00
  LDY #01
-R16ROW JSR CRLF
+ JSR CRLF
 ROW0 LDA COLORPR"""
 
 GCDRAW_ROWCOUNT_OLD = """DUMP0A LDA #28
@@ -320,7 +310,6 @@ GCDRAW_MOVE_NEW = """SR06 LDX #00
 *
 SR07 LDX #02
 R9MC JSR R9MOVE
- JMP SR08A
 *
 SR08A DEC ROWCNT
  BNE SR09
@@ -701,10 +690,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R16 OkiGraph driver: exact hardware-good R11 PRCOMS behavior")
-    print("  R16 base GCDRAW: remove R12's three LF36-padding NOP bytes")
-    print("  R16 first physical card raster: two native OkiGraph graphics feeds")
-    print("  R16 later rows/fold/inter-piece positioning: unchanged")
+    print("  R17 OkiGraph driver: fine text-mode vertical card calibration")
+    print("  R17 startup: restore LF36 as 4/144 inch for type 5")
+    print("  R17 first special raster: one native 15/144 graphics feed")
+    print("  R17 X=12 card boundaries: +10/144 between panels, +22/144 total at end")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
