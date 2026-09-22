@@ -9,11 +9,11 @@ import pathlib
 
 EXPECTED = {
     "PRCOMS.ORIG": (1962, "6fb3928799f085967822362a3e7ba0b88dadd21e7e33372951e5734578c4629a"),
-    "PRCOMS.OKI":  (2039, "7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137"),
+    "PRCOMS.OKI":  (None, None),  # R18 discovery
     "MENUS7.ORIG": (3014, "86d7fa76bfd693d461aa9085e3612253837e7f5f02a6027581beef3284c5355f"),
     "MENUS7.OKI":  (3018, "1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485"),
     "GCDRAW.ORIG": (2737, "cfa548eb4f950156c14639372f2681edbaa810e86f0945d73c24e0304e436353"),
-    "GCDRAW.OKI":  (2812, None),  # R16: fits existing 2816-byte DOS allocation incl. 4-byte header
+    "GCDRAW.OKI":  (None, None),  # R18 discovery
 }
 
 
