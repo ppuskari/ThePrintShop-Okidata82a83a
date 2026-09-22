@@ -56,15 +56,9 @@ def main() -> int:
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
     glines = gcdraw_orig.splitlines()
-    print("=== R17 GCDRAW YMAX/PIECE definitions ===")
-    for i, line in enumerate(glines):
-        u = line.upper()
-        if "YMAXTBL" in u or "YMAX EQU" in u or "PIECE EQU" in u or "SIDE EQU" in u:
-            lo = max(0, i - 3)
-            hi = min(len(glines), i + 6)
-            for j in range(lo, hi):
-                print(f"{j + 1:04d}: {glines[j]}")
-            print("---")
+    print("=== R18 GCDRAW DOALL setup 185-245 ===")
+    for j in range(184, min(len(glines), 245)):
+        print(f"{j + 1:04d}: {glines[j]}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
