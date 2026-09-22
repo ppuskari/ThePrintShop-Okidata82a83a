@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R16 two-native-feed first-raster experiment: implemented; hardware validation is next.**
+**R19 fold-gap correction: CI-validated; hardware caliper validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,58 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R19: move spacing to the actual fold gap
+
+R18 proved that `DUMP2` is not the fold boundary.  It is an internal split
+inside each complete content frame, so adding space there creates a blank band
+through the middle of each panel.
+
+R19 is rebased directly from R16 and leaves those internal `DUMP2` / X=12
+boundaries unchanged.
+
+The requested card geometry is now applied at two different places:
+
+```text
+top of first printed card frame:
+    R16  = 30/144 inch
+    R19  =  4/144 fine feed + 15/144 native feed
+         = 19/144 inch
+
+    change = -11/144 inch = -1.940 mm
+
+true fold gap between complete frames:
+    +10/144 inch = +1.764 mm
+```
+
+The fold feed is inserted only in the outer `DOALL` loop after one complete
+frame has finished `DUMP` and before the next complete frame begins.  It is
+not inserted inside either frame.
+
+Type-5 fine moves use negative-X sentinel values handled by PRCOMS:
+`$82` requests 4/144 inch and `$85` requests 10/144 inch.  PRCOMS exits
+graphics first when needed, emits the historical Oki `ESC % 9 n` spacing in
+text mode, and then the existing raster path re-enters graphics normally.
+Ordinary type-5 X values retain the R16 behavior, including the X=2 LF36
+suppression and the X=12 internal frame boundary behavior.
+
+Validated R19 artifacts:
+
+```text
+PRCOMS.OKI
+length 2042
+SHA256 a71ff0071660c05abd343be341abf97b9b24ae713dad16c87e3a203d0fc724ad
+
+GCDRAW.OKI -> runtime DRAW1
+length 2809
+SHA256 d7a06749dee3f5855b63a9e2d93b5f244a618648c1aeb5b6676cd4ed4db94aec
+
+Runtime DSK
+SHA256 812a9eea5564cd1f1730aad4e57d215ed924e120a3b655aee6be62b399d8615d
+```
+
+R19 is a card-calibration build.  Sign/stationery geometry should be validated
+after the card layout is frozen.
 
 ## R16 first-card raster: two native OkiGraph feeds
 
