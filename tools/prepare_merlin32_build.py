@@ -56,8 +56,8 @@ def main() -> int:
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
     glines = gcdraw_orig.splitlines()
-    print("=== R18 GCDRAW DOALL setup 185-245 ===")
-    for j in range(184, min(len(glines), 245)):
+    print("=== GCDRAW DOALL/FOLD 240-340 ===")
+    for j in range(239, min(len(glines), 340)):
         print(f"{j + 1:04d}: {glines[j]}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
