@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R13 executable disk build: implemented and CI-validated; hardware validation is next.**
+**R14 test-paper-position cleanup: implemented; CI and hardware validation are next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,43 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R14 TEST PAPER POSITION: carriage return only
+
+The original Print Shop `TEST PAPER POSITION` path prints its horizontal
+alignment dots and then advances the paper.  Source/runtime tracing shows that
+DRAW5 menu option 2 calls SYSLIB through `$8803`.  SYSLIB's routine at
+`$88CC` ends at `$88FA` with:
+
+```asm
+INX
+LDY #$01
+JMP $1803       ; PRCOMS CRLF
+```
+
+That final jump is the unwanted carriage-return/line-feed operation.  R14
+changes only that six-byte epilogue, leaving the dot pattern, printer driver,
+and every normal print-path CR/LF untouched:
+
+```asm
+LDA #$0D
+JMP $1800       ; raw printer character output: CR only
+NOP             ; length-preserving runtime patch
+```
+
+Runtime bytes at `SYSLIB $88FA`:
+
+```text
+original  E8 A0 01 4C 03 18
+R14       A9 0D 4C 00 18 EA
+```
+
+The runtime builder refuses to apply the patch unless SYSLIB loads at
+`$8800` and the exact six historical bytes are present.  It then rereads
+SYSLIB through the DOS T/S chain and verifies the complete patched payload.
+This makes repeated paper-position tests return the carriage to column zero
+without changing the paper's vertical position, so the operator can
+micro-adjust the fanfold paper and run the test again.
 
 ## R13 first-pane top alignment
 
