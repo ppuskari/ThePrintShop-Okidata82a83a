@@ -5,6 +5,12 @@ The base image is the DOS 3.4 Color Print Shop runtime whose PRCOMS,
 MENUS7, and DRAW1 (GCDRAW.S) binaries exactly match the 1987-01-26 source
 snapshot when assembled with Merlin32.
 
+R14 also applies one layout-preserving six-byte patch to the original SYSLIB
+TEST PAPER POSITION routine.  The historical routine ends by jumping through
+PRCOMS CRLF ($1803), which advances the paper after the alignment dots.  R14
+returns the carriage with a raw CR through $1800 instead and does not feed
+the paper.
+
 This tool does not redistribute the base disk.  It either reads --base-disk
 or downloads the known archive image, verifies the original overlays
 byte-for-byte, then rewrites those files in place through their existing
@@ -29,6 +35,26 @@ BASE_URL = (
 )
 
 EXPECTED_IMAGE_SIZE = 35 * 16 * 256
+
+# SYSLIB loads at $8800.  TEST PAPER POSITION is entered through $8803,
+# which jumps to $88CC.  Its historical epilogue at $88FA is:
+#
+#   INX
+#   LDY #$01
+#   JMP $1803       ; PRCOMS CRLF -> carriage return  line feed
+#
+# R14 changes only those six bytes to:
+#
+#   LDA #$0D
+#   JMP $1800       ; PRCOMS raw character output
+#   NOP             ; keep the runtime image exactly length-preserving
+#
+# This lets repeated paper-position tests overprint the same vertical
+# position while the operator micro-adjusts the tractor paper.
+TEST_PAPER_LOAD = 0x8800
+TEST_PAPER_OFFSET = 0x00FA
+TEST_PAPER_OLD = bytes.fromhex("E8 A0 01 4C 03 18")
+TEST_PAPER_NEW = bytes.fromhex("A9 0D 4C 00 18 EA")
 
 EXPECTED_ORIGINAL = {
     "PRCOMS": {
@@ -134,6 +160,45 @@ def rewrite_dos_binary(img: bytes, name: str, payload: bytes) -> bytes:
     return bytes(out)
 
 
+def patch_test_paper_cr_only(img: bytes) -> bytes:
+    """Remove only the post-dot line feed from TEST PAPER POSITION."""
+    load, payload = read_dos_binary(img, "SYSLIB")
+    if load != TEST_PAPER_LOAD:
+        raise RuntimeError(
+            f"SYSLIB: expected load address 0x{TEST_PAPER_LOAD:04X}, "
+            f"got 0x{load:04X}"
+        )
+
+    end = TEST_PAPER_OFFSET + len(TEST_PAPER_OLD)
+    if end > len(payload):
+        raise RuntimeError("SYSLIB: TEST PAPER POSITION patch is out of range")
+
+    found = payload[TEST_PAPER_OFFSET:end]
+    if found != TEST_PAPER_OLD:
+        raise RuntimeError(
+            "SYSLIB: TEST PAPER POSITION epilogue does not match the "
+            f"known original bytes; expected {TEST_PAPER_OLD.hex(' ')}, "
+            f"got {found.hex(' ')}"
+        )
+
+    patched = bytearray(payload)
+    patched[TEST_PAPER_OFFSET:end] = TEST_PAPER_NEW
+    patched_payload = bytes(patched)
+
+    out = rewrite_dos_binary(img, "SYSLIB", patched_payload)
+
+    check_load, check_payload = read_dos_binary(out, "SYSLIB")
+    if check_load != TEST_PAPER_LOAD or check_payload != patched_payload:
+        raise RuntimeError("SYSLIB: TEST PAPER POSITION patch read-back failed")
+
+    print(
+        "  patched SYSLIB TEST PAPER POSITION: PASS "
+        f"0x{TEST_PAPER_LOAD + TEST_PAPER_OFFSET:04X} "
+        f"{TEST_PAPER_OLD.hex(' ')} -> {TEST_PAPER_NEW.hex(' ')}"
+    )
+    return out
+
+
 def verify_patched(img: bytes, expected: dict[str, bytes]) -> None:
     for name, expected_payload in expected.items():
         load, payload = read_dos_binary(img, name)
@@ -174,7 +239,7 @@ def main() -> int:
         )
 
     entries = {e["name"].upper(): e for e in catalog(img)}
-    for required in ("PRCOMS", "MENUS7", "DRAW1"):
+    for required in ("PRCOMS", "MENUS7", "DRAW1", "SYSLIB"):
         if required not in entries:
             raise RuntimeError(f"base disk is missing required file {required}")
 
@@ -199,6 +264,9 @@ def main() -> int:
     img = rewrite_dos_binary(img, "PRCOMS", prcoms)
     img = rewrite_dos_binary(img, "MENUS7", menus7)
     img = rewrite_dos_binary(img, "DRAW1", gcdraw)
+
+    print("Patching TEST PAPER POSITION to return carriage without line feed...")
+    img = patch_test_paper_cr_only(img)
 
     print("Reading patched overlays back through DOS T/S chains...")
     verify_patched(
