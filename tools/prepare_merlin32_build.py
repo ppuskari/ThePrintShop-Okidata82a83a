@@ -56,12 +56,14 @@ def main() -> int:
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
     glines = gcdraw_orig.splitlines()
-    print("=== R18 GCDRAW DOALL flow 236-320 ===")
-    for j in range(235, min(len(glines), 320)):
-        print(f"{j + 1:04d}: {glines[j]}")
-    print("=== R18 GCDRAW DUMP/DUMP2 context 1360-1450 ===")
-    for j in range(1359, min(len(glines), 1450)):
-        print(f"{j + 1:04d}: {glines[j]}")
+    print("=== GCDRAW all CRLF call contexts ===")
+    for i, line in enumerate(glines):
+        if "JSR CRLF" in line.upper() or "JMP CRLF" in line.upper():
+            lo = max(0, i - 8)
+            hi = min(len(glines), i + 5)
+            print(f"--- around line {i + 1} ---")
+            for j in range(lo, hi):
+                print(f"{j + 1:04d}: {glines[j]}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
