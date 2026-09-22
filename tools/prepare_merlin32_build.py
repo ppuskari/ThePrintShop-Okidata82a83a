@@ -55,22 +55,14 @@ def main() -> int:
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
-    # TEMP R17 investigation: expose original card vertical-motion call sites.
+    # TEMP R17 investigation: expose original card vertical geometry.
     glines = gcdraw_orig.splitlines()
-    print("=== R17 GCDRAW vertical-motion diagnostics ===")
-    for i, line in enumerate(glines):
-        upper = line.upper()
-        if (
-            "FFHALF" in upper
-            or "LF36" in upper
-            or "JSR CRLF" in upper
-            or "JMP CRLF" in upper
-        ):
-            lo = max(0, i - 5)
-            hi = min(len(glines), i + 7)
-            print(f"--- GCDRAW lines {lo + 1}-{hi} ---")
-            for j in range(lo, hi):
-                print(f"{j + 1:04d}: {glines[j]}")
+    print("=== R17 GCDRAW card-control block 210-305 ===")
+    for j in range(209, min(len(glines), 305)):
+        print(f"{j + 1:04d}: {glines[j]}")
+    print("=== R17 GCDRAW raster/control block 1340-1510 ===")
+    for j in range(1339, min(len(glines), 1510)):
+        print(f"{j + 1:04d}: {glines[j]}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
