@@ -234,22 +234,20 @@ ROW LDX #00
 
 GCDRAW_DUMP_NEW = """DUMP2 STX BADDR
  STY BADDR+1
+ LDX #07
+ LDY #00
+ LDA SIDE
+ BEQ R19POS
  LDA PIECE
  CMP #$C4
- LDA #00
- ROL
- EOR SIDE
+ BNE R19POS
  LDX #01
  LDY #02
- BEQ R18GAP
- LDX #05
- DEY
-R18GAP JSR CRLF
+R19POS JSR CRLF
  LDX #00
  LDY #00
  JSR SENDGC
  LDX CREDBUF-1
- BEQ ROW
  DEX
  BNE ROW
  INC CREDBUF-1
@@ -360,6 +358,19 @@ R9HI HEX 0102FEFE
 *
 GCNUMH HEX 040204"""
 
+GCDRAW_LF36_OLD = """LF36A LDX #02
+ LDY SIDE
+ BNE LF36B
+ INY
+LF36B JMP CRLF"""
+
+GCDRAW_LF36_NEW = """LF36A LDX #05
+ LDY SIDE
+ BNE LF36B
+ LDX #02
+ INY
+LF36B JMP CRLF"""
+
 
 
 def patch_gcdraw(text: str) -> str:
@@ -392,6 +403,12 @@ def patch_gcdraw(text: str) -> str:
         GCDRAW_MOVE_OLD,
         GCDRAW_MOVE_NEW,
         "GCDRAW.S type-5 card source stepping",
+    )
+    patched = replace_once(
+        patched,
+        GCDRAW_LF36_OLD,
+        GCDRAW_LF36_NEW,
+        "GCDRAW.S true panel-fold feed",
     )
     return replace_once(
         patched,
@@ -690,10 +707,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R18 base: rebased directly from hardware-tested R16")
-    print("  R18 top: 4/144 fine feed + one 15/144 native feed = 19/144")
-    print("  R18 gap: exactly one 10/144 fine feed between complete card panels")
-    print("  R18 in-panel X=12 boundaries keep their original R16 distance")
+    print("  R19 base: rebased from hardware-tested R16/R18 transport")
+    print("  R19 top: 4/144 fine feed only at SIDE=1 PIECE=$C4")
+    print("  R19 fold: one 10/144 fine feed only at end of SIDE=1 DOALL")
+    print("  R19 DUMP2 half-panel join: zero feed except the absolute page top")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
