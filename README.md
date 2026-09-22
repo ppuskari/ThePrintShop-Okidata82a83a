@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R14 test-paper-position cleanup: implemented; CI and hardware validation are next.**
+**R15 first-raster native-feed experiment: implemented; hardware validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,43 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R15 first-card raster: one native OkiGraph feed
+
+The perforation-aligned R14 paper-position test removed the remaining setup
+ambiguity.  Hardware comparison showed that the current zero-feed first raster
+starts slightly too high, while one manual normal line feed starts clearly too
+low.
+
+R15 changes only the R13 first-physical-card-raster branch.  When the
+`PIECE + YMAX = $88` first-pane condition is true, execution now goes through
+the existing `ROW` path instead of skipping directly to `ROW0`:
+
+```asm
+; R13
+CMP #$88
+BEQ ROW0
+
+; R15
+CMP #$88
+BEQ ROW
+```
+
+For printer type 5, graphics mode has already been entered by `SENDGC`.
+The existing `ROW` call uses `CRLF X=0,Y=1`, which the OkiGraph-specific
+PRCOMS path implements as exactly one native graphics feed:
+
+```text
+$03 $0E
+```
+
+That is the roughly 15/144-inch startup shift we want to test.  No normal
+text LF is restored.  PRCOMS, graphics escaping, source-row resampling, later
+raster feeds, fold spacing, inter-piece positioning, and the R14 CR-only paper
+alignment patch are unchanged.
+
+The source edit is length-preserving: the assembled GCDRAW/DRAW1 overlay
+remains 2812 bytes and only the relative branch target changes.
 
 ## R14 TEST PAPER POSITION: carriage return only
 
