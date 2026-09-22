@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R16 two-native-feed first-raster experiment: implemented; hardware validation is next.**
+**R19 single-fold-gap correction: CI-validated; hardware caliper validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,150 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R19 single fold gap
+
+The R18 hardware photo exposed the remaining interpretation error: the
+`DUMP2` boundary is not the fold between the two complete printed card
+panels.  In monochrome greeting-card output, each complete panel is rendered
+by two 196-line pieces, so `DUMP2` occurs at the midpoint of the panel as
+well as at its beginning.  Applying fine spacing there therefore created the
+two visible horizontal seams in the printed artwork.
+
+R19 keeps the R18 fine-spacing transport but moves the adjustments to the
+actual geometry boundaries.
+
+For the top-of-page correction, only the absolute first monochrome piece is
+special-cased:
+
+```text
+SIDE = 1
+PIECE = $C4 (196)
+```
+
+That first piece gets 4/144 inch of text-mode fine feed followed by the normal
+single 15/144-inch native graphics feed, for 19/144 inch total.  Relative to
+R16's two native graphics feeds (30/144 inch), the first printed border moves
+up by exactly:
+
+```text
+11/144 inch = 1.940 mm
+```
+
+Every other `DUMP2` join remains zero-feed, so there is no inserted white
+space in the middle of either complete card panel.
+
+The true fold is the boundary between the two `DOALL` passes.  The first
+complete panel is `SIDE=1`; the second is `SIDE=0`.  R19 changes the
+existing `LF36` end-of-panel helper so that:
+
+- end of `SIDE=1`: one 10/144-inch (1.764 mm) fine feed;
+- end of `SIDE=0`: no extra feed.
+
+The existing `DOALL9` X=12,Y=0 call immediately restores normal
+24/144-inch text spacing after the fold feed.  Thus there is exactly one
+added vertical gap per card, and it occurs only at the real fold between the
+two complete panels.
+
+Validated R19 overlays:
+
+```text
+PRCOMS.OKI
+length 2043
+SHA256 74ec82b69ed2ccce454a4db9e8c70eef46bb0dcbacba84227156025501967118
+
+GCDRAW.OKI -> runtime DRAW1
+length 2811
+SHA256 eb2548a7b4cd55dd0456da6ab9bc7ebbc600a0c33d37ec5787dd00ed3fc93645
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+```
+
+Validated R19 runtime image:
+
+```text
+size   143360 bytes
+SHA256 4d31c28eb85fc6e1e9d405e4f58a9e6c99cd02dafb4bf44b2d8e30e9a66fef5e
+```
+
+The R14 TEST PAPER POSITION CR-only patch and all horizontal/raster behavior
+remain unchanged.
+
+## R18 card vertical spacing: rebase from R16
+
+R17 is intentionally abandoned.  It changed the `X=12` boundaries inside
+each rendered card panel, which inserted white space in the middle of both
+panels and caused the output to run off the page.
+
+R18 is rebased directly from the hardware-tested R16 branch and targets only
+the two measurements requested for the next card test:
+
+```text
+top margin:       R16 - 11/144 inch
+                  = R16 - 1.940 mm
+
+between the two complete card panels:
+                  +10/144 inch
+                  = +1.764 mm
+```
+
+The 10/144-inch value is the nearest native `ESC % 9 n` spacing reachable
+through Print Shop's X/72-inch interface to the requested 1.8-1.9 mm.
+
+The important distinction is where the extra spacing is applied.  GCDRAW's
+`DUMP2` entry occurs once at the beginning of each complete card panel.
+R18 selects the first versus second complete panel from `SIDE` and `PIECE`
+and changes that DUMP2 positioning only:
+
+- first complete panel: `X=1,Y=2` -> two 2/144-inch fine feeds = 4/144 inch;
+- second complete panel: `X=5,Y=1` -> one 10/144-inch fine feed.
+
+The first physical raster that used two native 15/144-inch feeds in the R16
+special case is reduced to the normal single 15/144-inch feed.  Therefore the
+first-panel start changes from 30/144 inch to:
+
+```text
+4/144 fine positioning
++ 15/144 native OkiGraph raster feed
+= 19/144 inch
+
+30/144 - 19/144 = 11/144 inch = 1.940 mm upward
+```
+
+No R17-style substitution is made at the `X=12` boundaries within a panel.
+Those boundaries retain their R16 physical distance.  Fine spacing is emitted
+only after graphics mode has been exited; the next `SENDGC` re-enters
+OkiGraph graphics mode.
+
+The R14 TEST PAPER POSITION CR-only patch remains unchanged.
+
+R18 is deliberately a greeting-card calibration build.  Signs and stationery
+remain a later validation step after the card geometry is frozen.
+
+Validated R18 overlays:
+
+```text
+PRCOMS.OKI
+length 2043
+SHA256 74ec82b69ed2ccce454a4db9e8c70eef46bb0dcbacba84227156025501967118
+
+GCDRAW.OKI -> runtime DRAW1
+length 2811
+SHA256 309f7182240d896eefca1b0d1aeb3d6161eed77deba8b571e0595052d2045a13
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+```
+
+Validated R18 runtime image:
+
+```text
+size   143360 bytes
+SHA256 7ea6fb104e2e5153f2ea7755e1fdadac65bb4c34150bde4ffcf8c9dccbd71048
+```
 
 ## R16 first-card raster: two native OkiGraph feeds
 

@@ -93,22 +93,8 @@ CRLF_OLD = re.compile(
 
 CRLF_NEW = """CRLF LDA PRTYPE
  CMP #05
- BEQ CRLF5
- LDA #$0D
- JSR COUT1
- JSR SETLF
- DEY
- BMI CRLFX
-CRLF2 LDA #$0A
- JSR COUT1
- DEY
- BPL CRLF2
- BMI CRLFX
-*
-* OKIGRAPH I TYPE-5 CR/LF - R8 PRCOMS CORE
-* Continuous graphics from R7; DUMP boundary handling is in GCDRAW.
-*
-CRLF5 LDA FIX80
+ BNE CRLFN
+ LDA FIX80
  BEQ CRLF5T
  CPX #00
  BNE CRLF5E
@@ -126,16 +112,20 @@ CRLF5E LDA #03
  LDA #02
  JSR COUTRAW
  DEC FIX80
-CRLF5T LDA #$0D
+CRLF5T CPX #02
+ BNE CRLFN
+ LDA #$0D
  JSR COUTRAW
+ JMP CRLFX
+CRLFN LDA #$0D
+ JSR COUT1
+ JSR SETLF
  DEY
  BMI CRLFX
- CPX #02
- BEQ CRLFX
-CRLF5L LDA #$0A
- JSR COUTRAW
+CRLF2 LDA #$0A
+ JSR COUT1
  DEY
- BPL CRLF5L
+ BPL CRLF2
 CRLFX TXA
  PHA
  JSR UPLRK
@@ -206,7 +196,7 @@ SETLF5_OLD = """SETLF5 LDA #'%'
  TXA
  ASL
  JMP COUT1"""
-SETLF5_NEW = """SETLF5 RTS"""
+SETLF5_NEW = SETLF5_OLD
 
 MENUS_INIT_OLD = """ JSR GSELECT
  STA PRTYPE
@@ -246,27 +236,25 @@ GCDRAW_DUMP_NEW = """DUMP2 STX BADDR
  STY BADDR+1
  LDX #07
  LDY #00
- JSR CRLF
+ LDA SIDE
+ BEQ R19POS
+ LDA PIECE
+ CMP #$C4
+ BNE R19POS
+ LDX #01
+ LDY #02
+R19POS JSR CRLF
  LDX #00
  LDY #00
  JSR SENDGC
  LDX CREDBUF-1
- BEQ R13FIRST
  DEX
  BNE ROW
  INC CREDBUF-1
  BNE ROW0
-R13FIRST LDA PIECE
- CLC
- ADC YMAX
- CMP #$88
- BNE ROW
- LDY #02
- BNE R16ROW
-*
 ROW LDX #00
  LDY #01
-R16ROW JSR CRLF
+ JSR CRLF
 ROW0 LDA COLORPR"""
 
 GCDRAW_ROWCOUNT_OLD = """DUMP0A LDA #28
@@ -320,7 +308,6 @@ GCDRAW_MOVE_NEW = """SR06 LDX #00
 *
 SR07 LDX #02
 R9MC JSR R9MOVE
- JMP SR08A
 *
 SR08A DEC ROWCNT
  BNE SR09
@@ -371,6 +358,19 @@ R9HI HEX 0102FEFE
 *
 GCNUMH HEX 040204"""
 
+GCDRAW_LF36_OLD = """LF36A LDX #02
+ LDY SIDE
+ BNE LF36B
+ INY
+LF36B JMP CRLF"""
+
+GCDRAW_LF36_NEW = """LF36A LDX #05
+ LDY SIDE
+ BNE LF36B
+ LDX #02
+ INY
+LF36B JMP CRLF"""
+
 
 
 def patch_gcdraw(text: str) -> str:
@@ -403,6 +403,12 @@ def patch_gcdraw(text: str) -> str:
         GCDRAW_MOVE_OLD,
         GCDRAW_MOVE_NEW,
         "GCDRAW.S type-5 card source stepping",
+    )
+    patched = replace_once(
+        patched,
+        GCDRAW_LF36_OLD,
+        GCDRAW_LF36_NEW,
+        "GCDRAW.S true panel-fold feed",
     )
     return replace_once(
         patched,
@@ -701,10 +707,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R16 OkiGraph driver: exact hardware-good R11 PRCOMS behavior")
-    print("  R16 base GCDRAW: remove R12's three LF36-padding NOP bytes")
-    print("  R16 first physical card raster: two native OkiGraph graphics feeds")
-    print("  R16 later rows/fold/inter-piece positioning: unchanged")
+    print("  R19 base: rebased from hardware-tested R16/R18 transport")
+    print("  R19 top: 4/144 fine feed only at SIDE=1 PIECE=$C4")
+    print("  R19 fold: one 10/144 fine feed only at end of SIDE=1 DOALL")
+    print("  R19 DUMP2 half-panel join: zero feed except the absolute page top")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
