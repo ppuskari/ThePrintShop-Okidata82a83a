@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R15 first-raster native-feed experiment: implemented; hardware validation is next.**
+**R16 two-native-feed first-raster experiment: implemented; hardware validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,67 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R16 first-card raster: two native OkiGraph feeds
+
+With R15 aligned from the perforation-defined paper-position test, hardware
+measurement put the top border dots at about 5.4 mm and the bottom border dots
+at about 11.2-11.4 mm.  Centering that image requires roughly another 2.9-3.0
+mm downward shift.  One native OkiGraph graphics feed is about 15/144 inch,
+or 2.65 mm, so R16 tests exactly one additional native feed.
+
+The first physical card raster now takes `CRLF X=0,Y=2` while graphics mode
+is already active.  On the OkiGraph-specific PRCOMS path that produces two
+native graphics advances before the first raster:
+
+```text
+$03 $0E
+$03 $0E
+```
+
+Normal later rows still use `Y=1`, so their spacing is unchanged.  No text
+line feed is restored.
+
+To fit this without crossing the Print Shop application-data boundary at
+`$8300`, the first-raster decision is written as a four-byte extension only:
+
+```asm
+R13FIRST LDA PIECE
+ CLC
+ ADC YMAX
+ CMP #$88
+ BNE ROW
+ LDY #02
+ BNE R16ROW
+*
+ROW LDX #00
+ LDY #01
+R16ROW JSR CRLF
+ROW0 LDA COLORPR
+```
+
+On the first-pane condition, X is already zero from `LDX CREDBUF-1 / BEQ`,
+so the special path can skip `LDX #00`.  `LDY #02` clears Z, making the
+`BNE R16ROW` unconditional.  Other cases fall through the normal
+`LDX #00 / LDY #01` row path.
+
+The runtime DRAW1 DOS file has an existing 2816-byte on-disk allocation,
+but four of those bytes are the DOS binary load/length header, so the maximum
+payload that can be rewritten in place is 2812 bytes.  R16 therefore recovers
+four bytes elsewhere instead of growing the file:
+
+- the three R12 padding NOPs that replaced the removed startup `JSR LF36`
+  are now omitted entirely; all labels are reassembled, so they are not needed
+  for layout preservation;
+- immediately after `INC CREDBUF-1`, `JMP ROW0` becomes `BNE ROW0`.
+  That branch is guaranteed taken on this path because the preceding logic
+  reaches it only when `CREDBUF-1` was 1, so the increment produces 2.
+
+Those four bytes exactly pay for the R16 two-feed first-raster logic.  The
+assembled GCDRAW/DRAW1 payload remains 2812 bytes and still fits the existing
+DOS allocation without reallocating sectors.  PRCOMS, MENUS7, source-row
+resampling, fold and inter-piece geometry, graphics escaping, and the R14
+CR-only paper-position patch are unchanged.
 
 ## R15 first-card raster: one native OkiGraph feed
 
