@@ -55,10 +55,16 @@ def main() -> int:
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
-    plines = prcoms_orig.splitlines()
-    print("=== R17 PRCOMS lines 1-190 ===")
-    for j in range(0, min(len(plines), 190)):
-        print(f"{j + 1:04d}: {plines[j]}")
+    glines = gcdraw_orig.splitlines()
+    print("=== R17 GCDRAW YMAX/PIECE definitions ===")
+    for i, line in enumerate(glines):
+        u = line.upper()
+        if "YMAXTBL" in u or "YMAX EQU" in u or "PIECE EQU" in u or "SIDE EQU" in u:
+            lo = max(0, i - 3)
+            hi = min(len(glines), i + 6)
+            for j in range(lo, hi):
+                print(f"{j + 1:04d}: {glines[j]}")
+            print("---")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
