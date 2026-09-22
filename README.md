@@ -77,11 +77,23 @@ so the special path can skip `LDX #00`.  `LDY #02` clears Z, making the
 `BNE R16ROW` unconditional.  Other cases fall through the normal
 `LDX #00 / LDY #01` row path.
 
-R16 GCDRAW/DRAW1 is expected to assemble to exactly 2816 bytes:
-`$7800-$82FF`.  That consumes the final four bytes below `$8300` but does
-not overlap application data.  PRCOMS, MENUS7, source-row resampling, fold and
-inter-piece geometry, graphics escaping, and the R14 CR-only paper-position
-patch are unchanged.
+The runtime DRAW1 DOS file has an existing 2816-byte on-disk allocation,
+but four of those bytes are the DOS binary load/length header, so the maximum
+payload that can be rewritten in place is 2812 bytes.  R16 therefore recovers
+four bytes elsewhere instead of growing the file:
+
+- the three R12 padding NOPs that replaced the removed startup `JSR LF36`
+  are now omitted entirely; all labels are reassembled, so they are not needed
+  for layout preservation;
+- immediately after `INC CREDBUF-1`, `JMP ROW0` becomes `BNE ROW0`.
+  That branch is guaranteed taken on this path because the preceding logic
+  reaches it only when `CREDBUF-1` was 1, so the increment produces 2.
+
+Those four bytes exactly pay for the R16 two-feed first-raster logic.  The
+assembled GCDRAW/DRAW1 payload remains 2812 bytes and still fits the existing
+DOS allocation without reallocating sectors.  PRCOMS, MENUS7, source-row
+resampling, fold and inter-piece geometry, graphics escaping, and the R14
+CR-only paper-position patch are unchanged.
 
 ## R15 first-card raster: one native OkiGraph feed
 
