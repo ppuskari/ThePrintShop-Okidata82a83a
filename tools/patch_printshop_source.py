@@ -105,10 +105,31 @@ CRLF2 LDA #$0A
  BPL CRLF2
  BMI CRLFX
 *
-* OKIGRAPH I TYPE-5 CR/LF - R8 PRCOMS CORE
-* Continuous graphics from R7; DUMP boundary handling is in GCDRAW.
+* OKIGRAPH I TYPE-5 CR/LF - R18 CARD GEOMETRY
+* X=7,Y=0 is the DUMP2 boundary between complete card panels.
+* First card panel: 4/144 inch fine feed, no CR.
+* Second card panel: 10/144 inch fine feed, no CR.
+* All in-panel raster/boundary behavior remains the R16 path.
 *
-CRLF5 LDA FIX80
+CRLF5 CPX #07
+ BNE CRLF5N
+ CPY #00
+ BNE CRLF5N
+ LDA $8300
+ CMP #02
+ BCS CRLF5N
+ LDX #01
+ LDA FIX80
+ BEQ CRLF5F
+ LDX #05
+ LDY #01
+ BNE R18FINE
+CRLF5F LDY #02
+R18FINE JSR SETLF
+ DEY
+ BMI CRLFX
+ BPL CRLF2
+CRLF5N LDA FIX80
  BEQ CRLF5T
  CPX #00
  BNE CRLF5E
@@ -206,7 +227,7 @@ SETLF5_OLD = """SETLF5 LDA #'%'
  TXA
  ASL
  JMP COUT1"""
-SETLF5_NEW = """SETLF5 RTS"""
+SETLF5_NEW = SETLF5_OLD
 
 MENUS_INIT_OLD = """ JSR GSELECT
  STA PRTYPE
@@ -256,17 +277,10 @@ GCDRAW_DUMP_NEW = """DUMP2 STX BADDR
  BNE ROW
  INC CREDBUF-1
  BNE ROW0
-R13FIRST LDA PIECE
- CLC
- ADC YMAX
- CMP #$88
- BNE ROW
- LDY #02
- BNE R16ROW
-*
+R13FIRST
 ROW LDX #00
  LDY #01
-R16ROW JSR CRLF
+ JSR CRLF
 ROW0 LDA COLORPR"""
 
 GCDRAW_ROWCOUNT_OLD = """DUMP0A LDA #28
@@ -701,10 +715,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R16 OkiGraph driver: exact hardware-good R11 PRCOMS behavior")
-    print("  R16 base GCDRAW: remove R12's three LF36-padding NOP bytes")
-    print("  R16 first physical card raster: two native OkiGraph graphics feeds")
-    print("  R16 later rows/fold/inter-piece positioning: unchanged")
+    print("  R18 base: rebased directly from hardware-tested R16")
+    print("  R18 top: 4/144 text feed + one 15/144 native feed = 19/144")
+    print("  R18 complete-panel gap: 10/144 text-mode fine feed")
+    print("  R18 in-panel boundaries and later raster spacing: unchanged from R16")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
