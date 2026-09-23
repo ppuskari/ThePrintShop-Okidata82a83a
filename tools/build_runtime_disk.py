@@ -262,6 +262,16 @@ def main() -> int:
     print("Validating exact Print Shop runtime base...")
     verify_original(img)
 
+    sys_load, sys_payload = read_dos_binary(img, "SYSLIB")
+    sys_entry = find_entry(img, "SYSLIB")
+    sys_capacity = len(file_sector_locations(img, sys_entry)) * SECTOR_SIZE - 4
+    print(
+        "  SYSLIB diagnostic: "
+        f"load=0x{sys_load:04X} len={len(sys_payload)} "
+        f"payload_capacity={sys_capacity} "
+        f"end=0x{sys_load + len(sys_payload):04X}"
+    )
+
     if args.bdraw_orig:
         draw4_load, draw4 = read_dos_binary(img, "DRAW4")
         bdraw = args.bdraw_orig.read_bytes()
