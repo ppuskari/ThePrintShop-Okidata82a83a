@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 greeting-card geometry is frozen; R26 balances sign compression at three omitted duplicate bands per half for final hardware validation.**
+**R21 greeting cards and R26 signs are hardware-golden; R27 repairs the stationery full-page advance with native OkiGraph spacing.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -34,6 +34,100 @@ The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
 
+## R27 stationery: restore the collapsed full-page advance
+
+R26 hardware validation finished sign mode at approximately 9.9 mm from both
+form edges, with the paper-position dots about one dot from ideal.  R27 leaves
+the R21 greeting-card and R26 sign geometry unchanged.
+
+The first stationery hardware test exposed a different problem.  The artwork
+itself starts correctly and the final registration position is about 10.2 mm
+from the desired page boundary, but the long inter-section/page movement is
+short by about **121 mm**.
+
+Source archaeology found the reason in the historical `LHDRAW.S` (runtime
+DRAW3) stationery path.  For `SIDE != 0`, Print Shop deliberately calls a
+movement documented as 575/72 inch:
+
+```asm
+MOV575 LDX #40
+ LDY #14
+ JSR MOVCRLF
+ LDX #08
+ LDY #01
+ JSR MOVCRLF
+*
+MOV7 LDX #07
+ LDY #01
+```
+
+With the original Okidata 92/93 type-5 driver, `SETLF5` programmed each
+linefeed to X/72 inch.  Therefore the intended movement was:
+
+```text
+14 x 40/72 + 1 x 8/72 + 1 x 7/72
+= 575/72 inch
+= 202.85 mm
+```
+
+Our OkiGraph I driver intentionally keeps `SETLF5` disabled because the
+historical `ESC % 9 n` sequence caused hardware corruption and runaway
+feeding in R17-R19.  As a result, the X=40 and X=8 spacing requests had
+collapsed into ordinary text linefeeds.
+
+R27 fixes only the type-5 `X=40,Y=14` stationery call while graphics mode is
+active.  Instead of exiting graphics and emitting 14 ordinary linefeeds, it
+emits **68 proven native OkiGraph graphics feeds**:
+
+```text
+68 x 15/144 inch
+= 7.08333 inch
+= 179.917 mm
+```
+
+At the printer's normal 6-LPI text advance, the 14 ordinary linefeeds that
+this replaces account for about 59.267 mm.  Therefore the net added movement
+is approximately:
+
+```text
+179.917 - 59.267 = 120.650 mm
+```
+
+which is within about 0.35 mm of the hardware-measured 121 mm deficit.  The
+following X=8 and X=7 one-linefeed calls remain unchanged.
+
+This is implemented in PRCOMS rather than by enlarging DRAW3.  Runtime DRAW3
+is 2811 bytes; its first 1791 bytes match the assembled historical LHDRAW
+source exactly, followed by a 1020-byte nonzero data tail.  Keeping DRAW3
+byte-for-byte unchanged avoids moving or overwriting that tail.
+
+R27 also keeps the compact graphics-exit behavior equivalent by routing the
+active type-5 exit through `COUT1`; this recovers enough bytes for the new
+stationery case while keeping PRCOMS inside its existing DOS allocation.
+
+Validated R27 overlays:
+
+```text
+PRCOMS.OKI
+length 2043
+SHA256 f0763857572ee113b2806fd0262d2f38b83d9f58571fa721a83867aad00d46a5
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+
+GCDRAW.OKI -> runtime DRAW1
+length 2810
+SHA256 4bd76c9d9fbe1a32870b00edc3ca54061037dc6cd4491eb8202b5e7f26c9db4a
+```
+
+Validated R27 runtime image:
+
+```text
+size   143360 bytes
+SHA256 904720bf9c72bcc99b4255f23c44cb601621a2715adf8e2360335bd655d8f6f0
+```
+
 ## R26 sign height: balanced six-band reduction
 
 R25 attempted to move the sign down by adding a first-raster native feed.
@@ -60,16 +154,9 @@ inside the first half.  Everything below that restored band shifts downward by:
 15/144 inch = 2.646 mm
 ```
 
-Using the R25 hardware measurement as the baseline, the expected outer margins
-are approximately:
-
-```text
-top:     8.5 mm   unchanged
-bottom: 12.2 - 2.646 = 9.554 mm
-```
-
-That leaves the outer margins within about 1.05 mm while avoiding another
-special graphics-entry path.  The two 196-line halves now also use identical
+Hardware validation landed at approximately **9.9 mm top / 9.9 mm bottom**,
+with the paper-position registration only about one dot from ideal.  R26 is
+therefore the frozen sign baseline.  The two 196-line halves now also use identical
 3-band compression, which is cleaner than R24's 4+3 distribution.
 
 All 28 source batches in each half still render.  Only redundant second copies

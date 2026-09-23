@@ -58,7 +58,10 @@ def crlf_type5(
     """Model the compact PRCOMS type-5 CR/LF path used by R8.
 
     Active graphics with X=0,Y>0 uses native OkiGraph feed+CR and remains
-    in graphics. Other calls exit graphics first, then emit text-mode CR.
+    in graphics. R27 also recognizes the stationery MOV575 X=40,Y=14 call
+    while graphics is active and substitutes 68 native graphics feeds. This
+    replaces the 14 ordinary text LFs that call produced after SETLF5 was
+    disabled. Other calls exit graphics first, then emit text-mode CR.
     Print Shop's X=2 LF36 helper is suppressed; other requested text-mode
     feeds use ordinary LF. The invalid legacy ESC % 9 sequence is never sent.
     """
@@ -66,6 +69,11 @@ def crlf_type5(
         raise ValueError("X and Y must be non-negative")
 
     out = bytearray()
+
+    if in_graphics and x_72 == 40:
+        for _ in range(68):
+            out += bytes([ETX, GRAPHICS_LF_CR])
+        return bytes(out), True
 
     if in_graphics and x_72 == 0 and y_count > 0:
         for _ in range(y_count):

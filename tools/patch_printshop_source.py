@@ -110,7 +110,11 @@ CRLF2 LDA #$0A
 *
 CRLF5 LDA FIX80
  BEQ CRLF5T
- CPX #00
+ CPX #40
+ BNE CRLF5N
+ LDY #68
+ BNE CRLF5G
+CRLF5N CPX #00
  BNE CRLF5E
  CPY #00
  BEQ CRLF5E
@@ -121,14 +125,12 @@ CRLF5G LDA #03
  DEY
  BNE CRLF5G
  JMP CRLFX
-CRLF5E LDA #03
- JSR COUTRAW
- LDA #02
- JSR COUTRAW
- DEC FIX80
+CRLF5E LDA #$0D
+ JSR COUT1
+ JMP CRLF5D
 CRLF5T LDA #$0D
  JSR COUTRAW
- DEY
+CRLF5D DEY
  BMI CRLFX
  CPX #02
  BEQ CRLFX
@@ -739,10 +741,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R26 base: golden R21 card geometry unchanged")
-    print("  R26 sign: omit six redundant doubled sign bands, three per 196-line half")
-    print("  R26 sign trim: 6 x 15/144 inch = 15.875 mm")
-    print("  R26 restores one duplicate band in the first half, shifting the lower sign down")
+    print("  R27 base: golden R21 cards + golden R26 signs unchanged")
+    print("  R27 stationery: type-5 X=40/Y=14 becomes 68 native graphics feeds")
+    print("  R27 native move: 68 x 15/144 inch = 179.917 mm")
+    print("  R27 preserves following X=8 and X=7 text-feed calls")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
