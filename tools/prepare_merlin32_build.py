@@ -55,11 +55,10 @@ def main() -> int:
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
-    print("=== PRCOMS SETLF SOURCE ===")
-    lines = prcoms_orig.splitlines()
-    for j in range(115, 180):
-        if j < len(lines):
-            print(f"{j + 1:04d}: {lines[j]}")
+    print("=== PRCOMS symbols around FIX80 / CONFIG ===")
+    for j, line in enumerate(prcoms_orig.splitlines()):
+        if any(k in line for k in ("FIX80", "PRTYPE", "PITYPE", "CONFIG", "EQU $B")):
+            print(f"{j + 1:04d}: {line}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
