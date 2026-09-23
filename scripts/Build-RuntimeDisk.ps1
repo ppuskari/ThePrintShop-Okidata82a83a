@@ -81,7 +81,9 @@ try {
             "MENUS7.ORIG.BUILD.S",
             "MENUS7.OKI.BUILD.S",
             "GCDRAW.ORIG.BUILD.S",
-            "GCDRAW.OKI.BUILD.S"
+            "GCDRAW.OKI.BUILD.S",
+            "BDRAW.ORIG.BUILD.S",
+            "BDRAW.OKI.BUILD.S"
         )) {
             Write-Host "  $Source"
             & $MerlinExe $Source
@@ -104,6 +106,7 @@ try {
     $Prcoms = Join-Path $OutPath "PRCOMS.OKI"
     $Menus7 = Join-Path $OutPath "MENUS7.OKI"
     $Gcdraw = Join-Path $OutPath "GCDRAW.OKI"
+    $Bdraw = Join-Path $OutPath "BDRAW.OKI"
 
     Write-Host ""
     Write-Host "Constructing runnable Print Shop DOS disk..."
@@ -112,6 +115,7 @@ try {
         "--prcoms", $Prcoms,
         "--menus7", $Menus7,
         "--gcdraw", $Gcdraw,
+        "--bdraw", $Bdraw,
         "--output", $Runtime
     )
     if ($BaseDisk) {
