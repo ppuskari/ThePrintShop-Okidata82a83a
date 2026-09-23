@@ -105,31 +105,35 @@ CRLF2 LDA #$0A
  BPL CRLF2
  BMI CRLFX
 *
-* OKIGRAPH I TYPE-5 CR/LF - R8 PRCOMS CORE
-* Continuous graphics from R7; DUMP boundary handling is in GCDRAW.
+* OKIGRAPH I TYPE-5 CR/LF - R29
+* R27 stationery X=40 remains native-only.  Banner icon X=7,Y>0
+* gets a 16-slice cadence; card/sign X=7,Y=0 stays on the normal path.
 *
 CRLF5 LDA FIX80
- BEQ CRLF5T
+ BEQ CRLF5E
  CPX #40
  BNE CRLF5N
  LDY #68
  BNE CRLF5G
-CRLF5N CPX #00
- BNE CRLF5E
- CPY #00
+CRLF5N TYA
  BEQ CRLF5E
+ CPX #07
+ BNE CRLF5Z
+ LDA $54
+ AND #$0E
+ BNE CRLFX
+ BEQ CRLF5G
+CRLF5Z TXA
+ BNE CRLF5E
 CRLF5G LDA #03
  JSR COUTRAW
  LDA #$0E
  JSR COUTRAW
  DEY
  BNE CRLF5G
- JMP CRLFX
+ BEQ CRLFX
 CRLF5E LDA #$0D
  JSR COUT1
- JMP CRLF5D
-CRLF5T LDA #$0D
- JSR COUTRAW
 CRLF5D DEY
  BMI CRLFX
  CPX #02
@@ -452,8 +456,82 @@ def patch_gcdraw(text: str) -> str:
     )
 
 def patch_bdraw(text: str) -> str:
-    """R29 banner overlay patch; populated after source-layout discovery."""
-    return text
+    """R29 banner-only DRAW4 rebuild based on the shipped runtime layout.
+
+    The archival BDRAW.S assembles two bytes longer than runtime DRAW4.
+    The shipped runtime omits REVCHK7's redundant BEQ REVCHKX, so reproduce
+    that first, then spend the existing DRAW4 allocation only on banner text
+    aspect correction.  Non-type-5 printers retain X=0 banner-text CRLF.
+    """
+    patched = replace_once(
+        text,
+        """REVCHK7 LDX ROTCNT
+ BEQ REVCHKX
+REVCHK8 LDY BYTCNT""",
+        """REVCHK7 LDX ROTCNT
+REVCHK8 LDY BYTCNT""",
+        "BDRAW.S shipped-runtime REVCHK7 delta",
+    )
+
+    patched = replace_once(
+        patched,
+        """BSTR6 LDX #00
+ LDY #01
+ JSR CRLF""",
+        """BSTR6 LDX #00
+ LDY $95F1
+ CPY #05
+ BNE BSTR6A
+ LDX BITCNT
+ DEX
+ TXA
+ ASL
+ TAX
+BSTR6A LDY #01
+ JSR CRLF""",
+        "BDRAW.S type-5 banner-text spacing selector",
+    )
+
+    # Two control-flow folds are exact because the preceding comparison
+    # already establishes Z=1 on the fall-through path.
+    patched = replace_once(
+        patched,
+        """ CPY #40
+ BNE BSTR8
+ JMP BSTR13""",
+        """ CPY #40
+ BNE BSTR8
+ BEQ BSTR13""",
+        "BDRAW.S BSTR8 branch fold",
+    )
+    patched = replace_once(
+        patched,
+        """ CPY FNZY
+ BNE BSTR10
+ JMP ZSEND""",
+        """ CPY FNZY
+ BNE BSTR10
+ BEQ ZSEND""",
+        "BDRAW.S BSTR10 branch fold",
+    )
+
+    # Both historical exits target a three-byte trampoline.  BDONE is within
+    # relative-branch range, so branch there directly and remove the JMP.
+    if patched.count("BSTRX2") != 3:
+        raise RuntimeError(
+            "BDRAW.S BSTRX2: expected two references plus one definition"
+        )
+    patched = patched.replace(" BMI BSTRX2", " BMI BDONE", 1)
+    patched = patched.replace(" BEQ BSTRX2", " BEQ BDONE", 1)
+    patched = replace_once(
+        patched,
+        """BSTRX2 JMP BDONE
+*
+""",
+        "",
+        "BDRAW.S BSTRX2 trampoline removal",
+    )
+    return patched
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
