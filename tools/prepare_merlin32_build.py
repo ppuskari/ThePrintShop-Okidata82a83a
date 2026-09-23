@@ -55,10 +55,15 @@ def main() -> int:
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
-    glines = gcdraw_orig.splitlines()
-    print("=== GCDRAW raster movement 1440-1515 ===")
-    for j in range(1439, min(len(glines), 1515)):
-        print(f"{j + 1:04d}: {glines[j]}")
+    plines = prcoms_orig.splitlines()
+    print("=== PRCOMS SENDGC contexts ===")
+    for i, line in enumerate(plines):
+        if "SENDGC" in line.upper() or "SENDGB" in line.upper() or "SGC5" in line.upper():
+            lo = max(0, i - 10)
+            hi = min(len(plines), i + 30)
+            print(f"--- around line {i + 1} ---")
+            for j in range(lo, hi):
+                print(f"{j + 1:04d}: {plines[j]}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
