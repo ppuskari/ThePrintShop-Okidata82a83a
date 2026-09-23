@@ -61,6 +61,13 @@ def main() -> int:
     gcdraw_oki = patch_gcdraw(gcdraw_orig)
     bdraw_oki = patch_bdraw(bdraw_orig)
 
+    p_lines = prcoms_oki.splitlines()
+    for i, line in enumerate(p_lines):
+        if "JMP " in line:
+            print(f"R29-PRCOMS-JMP {i + 1}:")
+            for row in p_lines[max(0, i - 4):min(len(p_lines), i + 3)]:
+                print("  " + row)
+
     # Temporary compact R29 source-layout discovery.  This prints only the
     # small banner control-flow neighborhoods needed to make a size-neutral
     # patch; the historical source itself is not stored in the repository.
