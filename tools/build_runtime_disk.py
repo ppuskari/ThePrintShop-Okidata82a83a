@@ -4,10 +4,12 @@
 R29 starts from the hardware-good R27 runtime.  PRCOMS, MENUS7, DRAW1,
 and the R14 SYSLIB paper-position patch remain the R27 versions.
 
-Banner geometry is implemented only in the BDRAW/DRAW4 overlay.  Because the
-patched DRAW4 is larger than its historical four data sectors, this builder
-may allocate one additional DOS 3.3 data sector to DRAW4.  The overlay still
-loads at $7800 and is required to end below $8300.
+Banner geometry is implemented only in the runtime DRAW4 overlay. R29 is
+strictly allocation- and address-preserving: the 1012-byte shipped payload is
+patched at two fixed sites and an eight-byte helper is appended into the
+existing fourth sector's EOF slack. The final payload is 1020 bytes, so the
+four-byte DOS binary header plus payload exactly fills the existing 1024-byte
+allocation. No VTOC, T/S-list, or existing runtime address is changed.
 """
 
 from __future__ import annotations
@@ -333,121 +335,37 @@ def rewrite_dos_binary(
     return bytes(out)
 
 
-class _HelperBuilder:
-    def __init__(self, base: int):
-        self.base = base
-        self.code = bytearray()
-        self.labels: dict[str, int] = {}
-        self.rel8: list[tuple[int, str]] = []
-        self.abs16: list[tuple[int, str]] = []
-
-    def emit(self, *values: int) -> None:
-        self.code.extend(values)
-
-    def label(self, name: str) -> None:
-        if name in self.labels:
-            raise RuntimeError(f"duplicate helper label {name}")
-        self.labels[name] = len(self.code)
-
-    def branch(self, opcode: int, label: str) -> None:
-        self.emit(opcode, 0)
-        self.rel8.append((len(self.code) - 1, label))
-
-    def abs_label(self, opcode: int, label: str) -> None:
-        self.emit(opcode, 0, 0)
-        self.abs16.append((len(self.code) - 2, label))
-
-    def finish(self) -> bytes:
-        for operand_index, label in self.rel8:
-            if label not in self.labels:
-                raise RuntimeError(f"unknown helper label {label}")
-            target = self.base + self.labels[label]
-            next_pc = self.base + operand_index + 1
-            delta = target - next_pc
-            if not -128 <= delta <= 127:
-                raise RuntimeError(f"branch to {label} is out of range")
-            self.code[operand_index] = delta & 0xFF
-
-        for operand_index, label in self.abs16:
-            if label not in self.labels:
-                raise RuntimeError(f"unknown helper label {label}")
-            target = self.base + self.labels[label]
-            self.code[operand_index] = target & 0xFF
-            self.code[operand_index + 1] = (target >> 8) & 0xFF
-
-        return bytes(self.code)
-
-
-def _build_banner_text_helper(base: int) -> bytes:
-    """Build type-5 banner-text 1,1,2 native-feed helper."""
-    a = _HelperBuilder(base)
-
-    # Call site already loaded X=0,Y=1. Non-type-5 printers simply tail-call
-    # the original CRLF. Type 5 changes only Y according to a 1,1,2 cadence.
-    a.emit(0xAD, 0xF1, 0x95)       # LDA $95F1 (PRTYPE)
-    a.emit(0xC9, 0x05)             # CMP #5
-    a.branch(0xD0, "pass")          # BNE pass
-    a.abs_label(0xEE, "phase")      # INC phase
-    a.abs_label(0xAD, "phase")      # LDA phase
-    a.emit(0xC9, 0x03)             # CMP #3
-    a.branch(0x90, "one")           # BCC one
-    a.emit(0xA9, 0x00)             # LDA #0
-    a.abs_label(0x8D, "phase")      # STA phase
-    a.emit(0xA0, 0x02)             # LDY #2
-    a.branch(0xD0, "pass")          # BNE pass (always)
-    a.label("one")
-    a.emit(0xA0, 0x01)             # LDY #1
-    a.label("pass")
-    a.emit(0x4C, 0x03, 0x18)       # JMP CRLF
-    a.label("phase")
-    a.emit(0x00)
-
-    return a.finish()
-
-
-def _build_banner_icon_helper(base: int) -> bytes:
-    """Build type-5 15->13 banner-icon positioning helper."""
-    a = _HelperBuilder(base)
-
-    # Original BICON2 code has already computed X=6/7,Y=1 before calling us.
-    # Preserve that for every non-type-5 printer.
-    a.emit(0xAD, 0xF1, 0x95)       # LDA $95F1 (PRTYPE)
-    a.emit(0xC9, 0x05)             # CMP #5
-    a.branch(0xD0, "pass")          # BNE pass
-
-    a.emit(0xA5, 0x54)             # LDA XCUR
-    a.label("mod")
-    a.emit(0xC9, 0x0F)             # CMP #15
-    a.branch(0x90, "remainder")     # BCC remainder
-    a.emit(0xE9, 0x0F)             # SBC #15 (CMP left C set)
-    a.branch(0xB0, "mod")           # BCS mod
-
-    a.label("remainder")
-    a.emit(0xC9, 0x00)             # CMP #0
-    a.branch(0xF0, "merge")         # BEQ merge
-    a.emit(0xC9, 0x08)             # CMP #8
-    a.branch(0xF0, "merge")         # BEQ merge
-
-    a.emit(0xA2, 0x00)             # LDX #0: native feed
-    a.emit(0xA0, 0x01)             # LDY #1
-    a.emit(0x4C, 0x03, 0x18)       # JMP CRLF
-
-    a.label("merge")
-    a.emit(0xA2, 0x02)             # LDX #2: zero-feed overstrike
-    a.emit(0xA0, 0x01)             # LDY #1
-    a.emit(0x4C, 0x03, 0x18)       # JMP CRLF
-
-    a.label("pass")
-    a.emit(0x4C, 0x03, 0x18)       # JMP original CRLF
-
-    return a.finish()
+R29_HELPER_BYTES = bytes.fromhex(
+    "F0 02 A2 01 CA 4C 03 18"
+)
 
 
 def patch_banner_draw4_payload(
     payload: bytes,
     load: int = 0x7800,
 ) -> tuple[bytes, dict[str, int]]:
-    """Patch the exact shipped DRAW4 and append banner-only helpers."""
+    """Patch the exact shipped DRAW4 without relocating existing code.
+
+    The shipped DRAW4 payload is 1012 bytes in four DOS data sectors.
+    With the four-byte DOS binary header, that leaves exactly eight bytes
+    in the existing 1024-byte allocation. R29 uses those eight bytes as one
+    shared helper at $7BF4; no new sector and no existing code relocation.
+
+    Text BSTR6:
+      original  LDX #0 / LDY #1 / JSR CRLF
+      R29       LDX BITCNT / LDY #1 / JSR $7BF8
+
+    $7BF8 is the DEX/JMP CRLF suffix of the shared helper. BITCNT runs 8..1,
+    so type-5 X becomes 7..0 while Y remains 1. This reproduces the earlier
+    159/160 text-spacing synthesis without any private phase byte.
+
+    Icon BICON2:
+      R29 sets X=3,Y=1,A=(XCUR & 7), then JSR $7BF4.
+      If A==0 the helper keeps X=3; otherwise it changes X to 1. The shared
+      DEX then maps those to X=2 (zero-feed merge) or X=0 (native feed).
+      Therefore every eighth source slice is overstruck and the other seven
+      use the proven 15/144-inch native OkiGraph feed.
+    """
     text_hits = [
         i for i in range(len(payload))
         if payload.startswith(BANNER_TEXT_CALL, i)
@@ -456,43 +374,85 @@ def patch_banner_draw4_payload(
         i for i in range(len(payload))
         if payload.startswith(BANNER_ICON_CALL, i)
     ]
-
     if len(text_hits) != 1:
         raise RuntimeError(
-            f"DRAW4: expected one banner-text CRLF site, found {len(text_hits)}"
+            f"DRAW4: expected one banner-text site, found {len(text_hits)}"
         )
     if len(icon_hits) != 1:
         raise RuntimeError(
-            f"DRAW4: expected one banner-icon CRLF site, found {len(icon_hits)}"
+            f"DRAW4: expected one banner-icon site, found {len(icon_hits)}"
         )
 
-    text_addr = load + len(payload)
-    text_helper = _build_banner_text_helper(text_addr)
-    icon_addr = text_addr + len(text_helper)
-    icon_helper = _build_banner_icon_helper(icon_addr)
+    helper_addr = load + len(payload)
+    common_addr = helper_addr + 4
+
+    # These addresses are part of the R29 safety contract. Existing DRAW4
+    # bytes remain at their original addresses; only the 8-byte EOF slack
+    # becomes newly loaded code.
+    if helper_addr != 0x7BF4 or common_addr != 0x7BF8:
+        raise RuntimeError(
+            f"DRAW4: unexpected helper layout "
+            f"0x{helper_addr:04X}/0x{common_addr:04X}"
+        )
 
     patched = bytearray(payload)
 
-    text_jsr = text_hits[0] + 4
-    if patched[text_jsr] != 0x20:
-        raise RuntimeError("DRAW4: banner-text site lost JSR opcode")
-    patched[text_jsr + 1] = text_addr & 0xFF
-    patched[text_jsr + 2] = (text_addr >> 8) & 0xFF
+    text_off = text_hits[0]
+    text_new = bytes([
+        0xA6, 0x58,             # LDX BITCNT
+        0xA0, 0x01,             # LDY #1
+        0x20,                   # JSR common helper
+        common_addr & 0xFF,
+        (common_addr >> 8) & 0xFF,
+    ])
+    if len(text_new) != len(BANNER_TEXT_CALL):
+        raise AssertionError("R29 text patch must be length-preserving")
+    patched[text_off:text_off + len(text_new)] = text_new
 
-    icon_jsr = icon_hits[0] + 8
-    if patched[icon_jsr] != 0x20:
-        raise RuntimeError("DRAW4: banner-icon site lost JSR opcode")
-    patched[icon_jsr + 1] = icon_addr & 0xFF
-    patched[icon_jsr + 2] = (icon_addr >> 8) & 0xFF
+    icon_off = icon_hits[0]
+    icon_new = bytes([
+        0xA2, 0x03,             # LDX #3
+        0xA0, 0x01,             # LDY #1
+        0xA5, 0x54,             # LDA XCUR
+        0x29, 0x07,             # AND #7
+        0x20,                   # JSR icon helper
+        helper_addr & 0xFF,
+        (helper_addr >> 8) & 0xFF,
+    ])
+    if len(icon_new) != len(BANNER_ICON_CALL):
+        raise AssertionError("R29 icon patch must be length-preserving")
+    patched[icon_off:icon_off + len(icon_new)] = icon_new
 
-    patched += text_helper
-    patched += icon_helper
+    patched += R29_HELPER_BYTES
+
+    if len(patched) != 1020:
+        raise RuntimeError(
+            f"DRAW4: R29 must be exactly 1020 bytes, got {len(patched)}"
+        )
+    if load + len(patched) != 0x7BFC:
+        raise RuntimeError(
+            f"DRAW4: unexpected R29 end 0x{load + len(patched):04X}"
+        )
+
+    # Prove no pre-existing byte outside the two hook ranges moved or changed.
+    allowed = set(range(text_off, text_off + len(text_new)))
+    allowed.update(range(icon_off, icon_off + len(icon_new)))
+    changed = {
+        i for i, (old, new) in enumerate(zip(payload, patched[:len(payload)]))
+        if old != new
+    }
+    if not changed.issubset(allowed):
+        unexpected = sorted(changed - allowed)
+        raise RuntimeError(
+            "DRAW4: bytes changed outside R29 hook sites: "
+            + ", ".join(f"+0x{i:04X}" for i in unexpected)
+        )
 
     return bytes(patched), {
-        "text_site": text_hits[0],
-        "icon_site": icon_hits[0],
-        "text_helper": text_addr,
-        "icon_helper": icon_addr,
+        "text_site": text_off,
+        "icon_site": icon_off,
+        "helper": helper_addr,
+        "common": common_addr,
     }
 
 
@@ -502,39 +462,50 @@ def patch_banner_draw4(img: bytes) -> tuple[bytes, bytes]:
     if load != expect["load"]:
         raise RuntimeError("DRAW4: unexpected load address")
     if len(payload) != expect["length"] or sha256(payload) != expect["sha256"]:
-        raise RuntimeError("DRAW4: runtime base does not match known 1012-byte image")
+        raise RuntimeError(
+            "DRAW4: runtime base does not match known 1012-byte image"
+        )
 
     patched_payload, info = patch_banner_draw4_payload(payload, load)
-    end = load + len(patched_payload)
-    if end > DRAW_OVERLAY_LIMIT:
+
+    # 4-byte DOS binary header + 1020-byte payload = exactly four sectors.
+    entry = find_entry(img, "DRAW4")
+    capacity = len(file_sector_locations(img, entry)) * SECTOR_SIZE
+    packed_length = 4 + len(patched_payload)
+    if capacity != 1024 or packed_length != capacity:
         raise RuntimeError(
-            f"R29 DRAW4 would end at 0x{end:04X}, beyond "
-            f"0x{DRAW_OVERLAY_LIMIT:04X}"
+            f"DRAW4: expected exact 1024-byte allocation fit; "
+            f"packed={packed_length} capacity={capacity}"
         )
 
     out = rewrite_dos_binary(
         img,
         "DRAW4",
         patched_payload,
-        allow_expand=True,
+        allow_expand=False,
     )
     check_load, check_payload = read_dos_binary(out, "DRAW4")
     if check_load != load or check_payload != patched_payload:
-        raise RuntimeError("DRAW4: R29 runtime patch read-back failed")
+        raise RuntimeError("DRAW4: R29 patch read-back failed")
 
     print(
-        "  patched runtime DRAW4 directly: PASS "
-        f"text site +0x{info['text_site']:04X} -> "
-        f"0x{info['text_helper']:04X}; "
-        f"icon site +0x{info['icon_site']:04X} -> "
-        f"0x{info['icon_helper']:04X}"
+        "  patched runtime DRAW4 in-place: PASS "
+        f"text +0x{info['text_site']:04X} -> common 0x{info['common']:04X}; "
+        f"icon +0x{info['icon_site']:04X} -> helper 0x{info['helper']:04X}"
+    )
+    print(
+        "  address/state contract: PASS "
+        "BITCNT=$58, XCUR=$54, helper=$7BF4, common=$7BF8, "
+        "no existing address moved"
     )
     print(
         f"  R29 DRAW4 len={len(patched_payload)} "
-        f"RAM=0x{load:04X}-0x{end - 1:04X} "
+        f"RAM=0x{load:04X}-0x{load + len(patched_payload) - 1:04X} "
+        f"packed={packed_length}/{capacity} "
         f"sha256={sha256(patched_payload)}"
     )
     return out, patched_payload
+
 
 
 def patch_test_paper_cr_only(img: bytes) -> tuple[bytes, bytes]:
