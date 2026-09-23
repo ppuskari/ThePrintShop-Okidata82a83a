@@ -43,3 +43,12 @@ jobs:
           name: PrintShop-Okidata82a83a-OkiGraphI-R27
           path: build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
           if-no-files-found: error
+
+      - name: Upload R29 BDRAW controls
+        uses: actions/upload-artifact@v4
+        with:
+          name: R29-BDRAW-controls
+          path: |
+            build-runtime\BDRAW.ORIG
+            build-runtime\BDRAW.OKI
+          if-no-files-found: error
