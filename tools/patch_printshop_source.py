@@ -218,6 +218,16 @@ MENUS_INIT_NEW = """ JSR GSELECT
  STA $B9
  LDA RETFLAG"""
 
+MENUS_R25_HELPER = """R25TOP LDA $95F5
+ CMP #02
+ BNE R25TOPX
+ LDX #00
+ LDY #00
+ JSR $1806
+ INY
+ JMP $1803
+R25TOPX RTS"""
+
 
 
 GCDRAW_START_OLD = """ LDA A2
@@ -228,6 +238,7 @@ GCDRAW_START_OLD = """ LDA A2
 
 GCDRAW_START_NEW = """ LDA A2
  STA $60D1
+ JSR $6ECA
  LDX #00
  STX RETFLAG"""
 
@@ -325,8 +336,7 @@ GCDRAW_SIGNSTEP_NEW = """ LDA SIDE
  AND #$07
  CMP #03
  BNE SR08A
- DEC ROWCNT
- BNE SR06"""
+ DEC ROWCNT"""
 
 GCDRAW_MOVE_NEW = """SR06 LDX #00
  BEQ R9MC
@@ -390,13 +400,13 @@ GCDRAW_LF36_OLD = """LF36A LDX #02
 LF36B JMP CRLF"""
 
 GCDRAW_LF36_NEW = """LF36A LDY SIDE
- LDX R22LFX,Y
+ LDX GCNUMH,Y
+ DEX
+ DEX
+ CPY #02
+ BCS LF36B
  INY
- CPY #03
- BCC LF36B
- DEY
-LF36B JMP CRLF
-R22LFX DFB 2,0,2"""
+LF36B JMP CRLF"""
 
 
 
@@ -569,12 +579,13 @@ def patch_menus(text: str) -> str:
     if len(OLD_MENU) != len(NEW_MENU):
         raise AssertionError("menu replacement must remain length-preserving")
     patched = replace_once(text, OLD_MENU, NEW_MENU, "MENUS7.S printer label")
-    return replace_once(
+    patched = replace_once(
         patched,
         MENUS_INIT_OLD,
         MENUS_INIT_NEW,
         "MENUS7.S type-5 state initialization",
     )
+    return patched.rstrip() + "\n" + MENUS_R25_HELPER + "\n"
 
 
 def load_image(path: pathlib.Path | None, disk_index: int) -> bytes:
@@ -740,10 +751,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R24 base: golden R21 card geometry unchanged")
-    print("  R24 sign: omit seven redundant doubled sign bands across the full page")
-    print("  R24 sign trim: 7 x 15/144 inch = 18.521 mm")
-    print("  R24 restores the final duplicate band in the second sign half")
+    print("  R25 base: R24 seven-band sign trim; R21 card geometry unchanged")
+    print("  R25 sign top: one native 15/144-inch OkiGraph feed before rendering")
+    print("  R25 sign height: unchanged from R24 at seven omitted duplicate bands")
+    print("  R25 expected margins from 8/12 mm: about 10.65/9.35 mm")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
