@@ -56,6 +56,33 @@ TEST_PAPER_OFFSET = 0x00FA
 TEST_PAPER_OLD = bytes.fromhex("E8 A0 01 4C 03 18")
 TEST_PAPER_NEW = bytes.fromhex("A9 0D 4C 00 18 EA")
 
+# R28 banner aspect-ratio helpers live in the resident SYSLIB tail.  Every
+# print overlay already calls GETBTNS at $8840, so SYSLIB is resident while
+# DRAW4 is running.  The historical SYSLIB payload is 4773 bytes at $8800
+# and its existing DOS allocation has room for 87 more payload bytes.
+SYSLIB_BASE_LENGTH = 4773
+
+# BSTR6 helper:
+#   non-type-5: preserve X=0 and tail-call normal CRLF
+#   type-5: X = BITCNT-1, yielding over 8 source rows:
+#     six ordinary 24/144 feeds + one 0-feed overstrike + one 15/144 native
+#     feed = 159/144 inch versus the historical target 160/144 inch.
+BANNER_TEXT_HELPER_BYTES = bytes.fromhex(
+    "AD F1 95 C9 05 D0 03 A6 58 CA 4C 03 18"
+)
+
+# BICON2 helper:
+#   non-type-5: preserve the historical X=6/7 request
+#   type-5: every eighth source slice uses X=2 (zero feed), the other seven
+#   use X=0 (native 15/144 feed).  Average = 13.125/144 inch versus the
+#   historical alternating 12/14 average of 13/144 inch.
+BANNER_ICON_HELPER_BYTES = bytes.fromhex(
+    "AD F1 95 C9 05 D0 0A A2 00 A5 54 29 07 D0 02 E8 E8 4C 03 18"
+)
+
+BANNER_TEXT_CALL = bytes.fromhex("A2 00 A0 01 20 03 18")
+BANNER_ICON_CALL = bytes.fromhex("A9 01 A8 25 54 09 06 AA 20 03 18")
+
 EXPECTED_ORIGINAL = {
     "PRCOMS": {
         "load": 0x1800,
@@ -70,6 +97,11 @@ EXPECTED_ORIGINAL = {
         "load": 0x7800,
         "length": 2737,
         "sha256": "cfa548eb4f950156c14639372f2681edbaa810e86f0945d73c24e0304e436353",
+    },
+    "DRAW4": {
+        "load": 0x7800,
+        "length": 1012,
+        "sha256": "787a97a6b6441724da019edf6ec586df3cf56acc61047db0b402553ac03699e4",
     },
 }
 
@@ -160,6 +192,115 @@ def rewrite_dos_binary(img: bytes, name: str, payload: bytes) -> bytes:
     return bytes(out)
 
 
+def _all_offsets(data: bytes, pattern: bytes) -> list[int]:
+    offsets: list[int] = []
+    start = 0
+    while True:
+        pos = data.find(pattern, start)
+        if pos < 0:
+            return offsets
+        offsets.append(pos)
+        start = pos + 1
+
+
+def install_banner_helpers(
+    img: bytes,
+) -> tuple[bytes, int, int, bytes]:
+    """Append R28 type-5-only banner helpers to resident SYSLIB."""
+    load, payload = read_dos_binary(img, "SYSLIB")
+    if load != TEST_PAPER_LOAD:
+        raise RuntimeError(
+            f"SYSLIB: expected load address 0x{TEST_PAPER_LOAD:04X}, "
+            f"got 0x{load:04X}"
+        )
+    if len(payload) != SYSLIB_BASE_LENGTH:
+        raise RuntimeError(
+            f"SYSLIB: expected base payload {SYSLIB_BASE_LENGTH} bytes, "
+            f"got {len(payload)}"
+        )
+
+    entry = find_entry(img, "SYSLIB")
+    capacity = len(file_sector_locations(img, entry)) * SECTOR_SIZE - 4
+
+    text_addr = load + len(payload)
+    icon_addr = text_addr + len(BANNER_TEXT_HELPER_BYTES)
+    patched_payload = (
+        payload
+        + BANNER_TEXT_HELPER_BYTES
+        + BANNER_ICON_HELPER_BYTES
+    )
+    if len(patched_payload) > capacity:
+        raise RuntimeError(
+            f"SYSLIB: R28 payload {len(patched_payload)} exceeds "
+            f"existing payload capacity {capacity}"
+        )
+
+    out = rewrite_dos_binary(img, "SYSLIB", patched_payload)
+    check_load, check_payload = read_dos_binary(out, "SYSLIB")
+    if check_load != load or check_payload != patched_payload:
+        raise RuntimeError("SYSLIB: R28 helper append read-back failed")
+
+    print(
+        "  installed R28 resident banner helpers: PASS "
+        f"text=0x{text_addr:04X} icon=0x{icon_addr:04X} "
+        f"len={len(patched_payload)}"
+    )
+    return out, text_addr, icon_addr, patched_payload
+
+
+def patch_banner_draw4(
+    img: bytes,
+    text_addr: int,
+    icon_addr: int,
+) -> tuple[bytes, bytes]:
+    """Redirect only DRAW4 banner CRLF sites through R28 resident helpers."""
+    load, payload = read_dos_binary(img, "DRAW4")
+    expect = EXPECTED_ORIGINAL["DRAW4"]
+    if load != expect["load"] or len(payload) != expect["length"]:
+        raise RuntimeError("DRAW4: unexpected load address or payload length")
+    if sha256(payload) != expect["sha256"]:
+        raise RuntimeError("DRAW4: base payload hash mismatch")
+
+    text_hits = _all_offsets(payload, BANNER_TEXT_CALL)
+    icon_hits = _all_offsets(payload, BANNER_ICON_CALL)
+    if len(text_hits) != 1:
+        raise RuntimeError(
+            f"DRAW4: expected one BSTR6 CRLF site, found {len(text_hits)}"
+        )
+    if len(icon_hits) != 1:
+        raise RuntimeError(
+            f"DRAW4: expected one BICON2 CRLF site, found {len(icon_hits)}"
+        )
+
+    patched = bytearray(payload)
+
+    # BSTR6: A2 00 A0 01 20 03 18
+    text_jsr = text_hits[0] + 4
+    if patched[text_jsr] != 0x20:
+        raise RuntimeError("DRAW4: BSTR6 JSR opcode mismatch")
+    patched[text_jsr + 1:text_jsr + 3] = text_addr.to_bytes(2, "little")
+
+    # BICON2: A9 01 A8 25 54 09 06 AA 20 03 18
+    icon_jsr = icon_hits[0] + 8
+    if patched[icon_jsr] != 0x20:
+        raise RuntimeError("DRAW4: BICON2 JSR opcode mismatch")
+    patched[icon_jsr + 1:icon_jsr + 3] = icon_addr.to_bytes(2, "little")
+
+    patched_payload = bytes(patched)
+    out = rewrite_dos_binary(img, "DRAW4", patched_payload)
+    check_load, check_payload = read_dos_binary(out, "DRAW4")
+    if check_load != load or check_payload != patched_payload:
+        raise RuntimeError("DRAW4: R28 patch read-back failed")
+
+    print(
+        "  patched DRAW4 banner aspect helpers: PASS "
+        f"BSTR6+0x{text_hits[0]:04X}->0x{text_addr:04X} "
+        f"BICON2+0x{icon_hits[0]:04X}->0x{icon_addr:04X} "
+        f"sha256={sha256(patched_payload)}"
+    )
+    return out, patched_payload
+
+
 def patch_test_paper_cr_only(img: bytes) -> bytes:
     """Remove only the post-dot line feed from TEST PAPER POSITION."""
     load, payload = read_dos_binary(img, "SYSLIB")
@@ -239,7 +380,7 @@ def main() -> int:
         )
 
     entries = {e["name"].upper(): e for e in catalog(img)}
-    for required in ("PRCOMS", "MENUS7", "DRAW1", "SYSLIB"):
+    for required in ("PRCOMS", "MENUS7", "DRAW1", "DRAW4", "SYSLIB"):
         if required not in entries:
             raise RuntimeError(f"base disk is missing required file {required}")
 
@@ -268,10 +409,26 @@ def main() -> int:
     print("Patching TEST PAPER POSITION to return carriage without line feed...")
     img = patch_test_paper_cr_only(img)
 
+    print("Installing R28 resident banner aspect-ratio helpers...")
+    img, banner_text_addr, banner_icon_addr, syslib_r28 = install_banner_helpers(
+        img
+    )
+
+    print("Redirecting DRAW4 banner raster spacing through R28 helpers...")
+    img, draw4_r28 = patch_banner_draw4(
+        img, banner_text_addr, banner_icon_addr
+    )
+
     print("Reading patched overlays back through DOS T/S chains...")
     verify_patched(
         img,
-        {"PRCOMS": prcoms, "MENUS7": menus7, "DRAW1": gcdraw},
+        {
+            "PRCOMS": prcoms,
+            "MENUS7": menus7,
+            "DRAW1": gcdraw,
+            "DRAW4": draw4_r28,
+            "SYSLIB": syslib_r28,
+        },
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

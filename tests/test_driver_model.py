@@ -6,6 +6,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from driver_model import (  # noqa: E402
+    banner_icon_x,
+    banner_text_x,
     crlf_type5,
     encode_columns,
     encode_pair,
@@ -58,6 +60,25 @@ class DriverModelTests(unittest.TestCase):
         self.assertEqual(stream, b"\x03\x02\x0d")
         self.assertFalse(state)
         self.assertNotIn(0x0A, stream)
+
+    def test_r28_banner_text_spacing_matches_20_over_144(self):
+        xs = [banner_text_x(n) for n in range(8, 0, -1)]
+        self.assertEqual(xs, [7, 6, 5, 4, 3, 2, 1, 0])
+
+        # Six ordinary 24/144 feeds, one zero-feed overstrike, and one
+        # native 15/144 feed total 159/144 inch versus target 160/144.
+        self.assertEqual(6 * 24 + 15, 159)
+        self.assertEqual(8 * 20, 160)
+
+    def test_r28_banner_icon_spacing_matches_13_over_144(self):
+        xs = [banner_icon_x(i) for i in range(88)]
+        self.assertEqual(xs.count(2), 11)
+        self.assertEqual(xs.count(0), 77)
+        self.assertEqual(xs[:8], [2, 0, 0, 0, 0, 0, 0, 0])
+
+        # One zero-feed overstrike plus seven native feeds per 8 slices.
+        self.assertEqual(7 * 15, 105)
+        self.assertEqual(8 * 13, 104)
 
     def test_r27_stationery_mov575_uses_native_feeds(self):
         stream1, state = crlf_type5(

@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 greeting cards and R26 signs are hardware-golden; R27 repairs the stationery full-page advance with native OkiGraph spacing.**
+**R21 greeting cards, R26 signs, and R27 stationery are hardware-golden; R28 corrects banner aspect ratio with type-5-only native spacing.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,109 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R28 banner: type-5-only aspect-ratio correction
+
+R27 stationery has now been hardware-validated as essentially perfect, so R28
+leaves PRCOMS, greeting-card geometry, sign geometry, and stationery movement
+unchanged.
+
+Banner mode exposed a different legacy-spacing mismatch.  The historical
+type-5 banner path expected programmable vertical spacing from SETLF5:
+
+```text
+banner text:  X=10 -> 20/144 inch per source row
+banner icon:  X=6/7 -> alternating 12/144 and 14/144
+                        average 13/144 inch per source slice
+```
+
+The OkiGraph I driver deliberately keeps SETLF5 disabled because the original
+ESC % 9 n sequence proved unsafe on hardware.  R28 therefore adapts the
+existing safe CRLF semantics instead of reintroducing programmable spacing.
+
+Two tiny type-5-only helpers are appended to resident SYSLIB:
+
+```text
+text helper:  $9AA5
+icon helper:  $9AB2
+```
+
+DRAW4 remains exactly 1012 bytes.  Only the two historical JSR CRLF targets
+inside banner mode are redirected to those helpers:
+
+```text
+BSTR6  +$0085 -> $9AA5
+BICON2 +$02BE -> $9AB2
+```
+
+For every printer type except type 5, each helper immediately tail-calls the
+original CRLF with X and Y unchanged.
+
+For type-5 banner text, the helper maps the existing BITCNT countdown 8..1 to
+X=7..0.  The already-proven R27 CRLF semantics then give, per eight source
+rows:
+
+```text
+6 ordinary text feeds x 24/144 = 144/144
+1 zero-feed X=2 overstrike      =   0/144
+1 native X=0 graphics feed      =  15/144
+                                     -------
+                                     159/144
+historical target: 8 x 20/144   = 160/144
+```
+
+That is only 0.625% short of the historical banner-text spacing while keeping
+every source raster represented; one neighboring raster pair is overstruck
+rather than discarded.
+
+For the banner icon, every eighth source slice uses X=2 and therefore
+overstrikes without a vertical feed; the other seven use the native 15/144
+OkiGraph graphics feed:
+
+```text
+7 x 15/144 = 105/144 per 8 source slices
+historical target = 8 x 13/144 = 104/144
+```
+
+That is about 0.96% tall relative to the historical target, versus the much
+larger error caused when the original X=6/7 requests collapsed to ordinary
+text linefeeds.
+
+The helper code lives in unused space at the end of resident SYSLIB rather
+than enlarging DRAW4.  Historical SYSLIB is 4773 bytes at $8800 and has 4860
+bytes of existing DOS payload capacity; R28 extends it to 4806 bytes.  The R14
+TEST PAPER POSITION CR-only patch remains intact.
+
+Validated R28 runtime components:
+
+```text
+PRCOMS.OKI
+length 2043
+SHA256 f0763857572ee113b2806fd0262d2f38b83d9f58571fa721a83867aad00d46a5
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+
+GCDRAW.OKI -> runtime DRAW1
+length 2810
+SHA256 4bd76c9d9fbe1a32870b00edc3ca54061037dc6cd4491eb8202b5e7f26c9db4a
+
+runtime DRAW4
+length 1012
+SHA256 17d4e410026f6c4bba070bf2ea3dcfa290b0dfa118dac00048d2e77c6989616d
+
+runtime SYSLIB
+length 4806
+SHA256 a09bd37d6fdca24ff3b13f6b49c0ece28de402463a92b8b11797c5dfa1b7fc96
+```
+
+Validated R28 runtime image:
+
+```text
+size   143360 bytes
+SHA256 475f325fec9371d9f030e5fa2b1404205970cfe99be56ac256fafeb7a3f7c5a1
+```
 
 ## R27 stationery: restore the collapsed full-page advance
 
@@ -74,6 +177,10 @@ Our OkiGraph I driver intentionally keeps `SETLF5` disabled because the
 historical `ESC % 9 n` sequence caused hardware corruption and runaway
 feeding in R17-R19.  As a result, the X=40 and X=8 spacing requests had
 collapsed into ordinary text linefeeds.
+
+Hardware testing confirmed the R27 stationery result is essentially perfect.
+The top placement and end-of-page registration are both where expected, so
+R27 is now the frozen stationery baseline.
 
 R27 fixes only the type-5 `X=40,Y=14` stationery call while graphics mode is
 active.  Instead of exiting graphics and emitting 14 ordinary linefeeds, it
