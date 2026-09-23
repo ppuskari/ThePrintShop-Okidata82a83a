@@ -57,17 +57,13 @@ def main() -> int:
 
     from inspect_printshop_source import catalog, file_sectors, textish
     d3 = load_image(None, 2)
-    for diskno, img in ((1, d1), (2, d2), (3, d3)):
-        entries = list(catalog(img))
-        print(f"=== DISK {diskno} CATALOG ===")
-        for e in entries:
-            print(e["name"])
-        for e in entries:
-            if "DRAW3" in e["name"].upper():
-                print(f"=== DRAW3 SOURCE DISK {diskno}: {e['name']} ===")
-                txt = textish(file_sectors(img, e))
-                for j, line in enumerate(txt.splitlines()):
-                    print(f"{j + 1:04d}: {line}")
+    entries = list(catalog(d3))
+    for e in entries:
+        if e["name"].upper() == "LHDRAW.S":
+            print("=== LHDRAW.S SOURCE ===")
+            txt = textish(file_sectors(d3, e))
+            for j, line in enumerate(txt.splitlines()):
+                print(f"{j + 1:04d}: {line}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
