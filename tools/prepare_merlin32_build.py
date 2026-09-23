@@ -55,10 +55,15 @@ def main() -> int:
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
-    mlines = menus7_orig.splitlines()
-    print("=== MENUS7 source tail ===")
-    for j in range(max(0, len(mlines) - 100), len(mlines)):
-        print(f"{j + 1:04d}: {mlines[j]}")
+    glines = gcdraw_orig.splitlines()
+    print("=== GCDRAW CREDBUF / PIECE / SIDE references ===")
+    for j, line in enumerate(glines):
+        if any(k in line for k in ("CREDBUF", "PIECE", "SIDE")):
+            lo = max(0, j - 3)
+            hi = min(len(glines), j + 4)
+            print(f"--- around line {j + 1} ---")
+            for k in range(lo, hi):
+                print(f"{k + 1:04d}: {glines[k]}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
