@@ -73,8 +73,8 @@ EXPECTED_ORIGINAL = {
     },
     "DRAW3": {
         "load": 0x7800,
-        "length": 1791,
-        "sha256": "16d6264b3a6f815f4138677967b235b37582713ec5bcc2c23f39cbeb3082282f",
+        "length": 2811,
+        "sha256": "R27_DISCOVERY",
     },
 }
 
@@ -111,6 +111,15 @@ def verify_original(img: bytes) -> None:
                 f"{name}: expected {expect['length']} bytes, got {len(payload)}"
             )
         digest = sha256(payload)
+        if name == "DRAW3":
+            prefix = payload[:1791]
+            print(
+                "  DRAW3 discovery: "
+                f"full_sha256={digest} "
+                f"prefix1791_sha256={sha256(prefix)} "
+                f"source_prefix_match="
+                f"{sha256(prefix) == '16d6264b3a6f815f4138677967b235b37582713ec5bcc2c23f39cbeb3082282f'}"
+            )
         if digest != expect["sha256"]:
             raise RuntimeError(
                 f"{name}: base runtime does not match the known source build; "
