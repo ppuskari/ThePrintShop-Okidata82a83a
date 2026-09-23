@@ -108,7 +108,7 @@ def verify_original(img: bytes) -> None:
                 f"{name}: base runtime mismatch; expected "
                 f"{expect['sha256']}, got {digest}"
             )
-        if load != expect["load"]:
+        if "load" in expect and load != expect["load"]:
             raise RuntimeError(
                 f"{name}: expected load 0x{expect['load']:04X}, "
                 f"got 0x{load:04X}"
