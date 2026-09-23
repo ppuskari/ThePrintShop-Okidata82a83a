@@ -74,6 +74,11 @@ def main() -> int:
                 for row in lines[lo:hi]:
                     print("  " + row)
                 break
+    for i, line in enumerate(lines):
+        if "JMP " in line:
+            print(f"R29-BDRAW-JMP {i + 1}:")
+            for row in lines[max(0, i - 4):min(len(lines), i + 3)]:
+                print("  " + row)
 
     products = {
         "PRCOMS.ORIG.BUILD.S": add_sav(prcoms_orig, "PRCOMS.ORIG"),
