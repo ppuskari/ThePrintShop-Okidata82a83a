@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 greeting-card geometry is frozen; R24 restores one lower sign band after the R23 hardware test and is ready for validation.**
+**R21 greeting-card geometry is frozen; R26 balances sign compression at three omitted duplicate bands per half for final hardware validation.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,75 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R26 sign height: balanced six-band reduction
+
+R25 attempted to move the sign down by adding a first-raster native feed.
+Hardware measurement remained essentially unchanged at about 8.5 mm top and
+12.2 mm bottom.  Source tracing explains why: the `CREDBUF-1` sentinel used
+by that first-raster decision is initialized only on the SIDE=0 outside-card
+path, so it is not a reliable first-sign-piece discriminator.
+
+Rather than add another special top-feed state machine, R26 uses the proven
+sign raster machinery itself.  It starts from R24 and restores one additional
+duplicate band in the **first** 196-line half.  The sign therefore changes from
+seven omitted duplicate bands to six, evenly distributed:
+
+```text
+first 196-line half:   3 duplicate bands omitted
+second 196-line half:  3 duplicate bands omitted
+total:                 6 bands omitted
+```
+
+This keeps the top border at the R24/R25 position, but adds one native band
+inside the first half.  Everything below that restored band shifts downward by:
+
+```text
+15/144 inch = 2.646 mm
+```
+
+Using the R25 hardware measurement as the baseline, the expected outer margins
+are approximately:
+
+```text
+top:     8.5 mm   unchanged
+bottom: 12.2 - 2.646 = 9.554 mm
+```
+
+That leaves the outer margins within about 1.05 mm while avoiding another
+special graphics-entry path.  The two 196-line halves now also use identical
+3-band compression, which is cleaner than R24's 4+3 distribution.
+
+All 28 source batches in each half still render.  Only redundant second copies
+from the sign's 2x vertical enlargement are omitted.  No source artwork is
+cropped.
+
+Greeting-card SIDE=0/1 geometry remains on the frozen R21 path.  PRCOMS,
+MENUS7, SETLF5-disabled behavior, and the R14 CR-only TEST PAPER POSITION
+patch are unchanged.
+
+Validated R26 overlays:
+
+```text
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+
+GCDRAW.OKI -> runtime DRAW1
+length 2810
+SHA256 4bd76c9d9fbe1a32870b00edc3ca54061037dc6cd4491eb8202b5e7f26c9db4a
+```
+
+Validated R26 runtime image:
+
+```text
+size   143360 bytes
+SHA256 51a095f9f13d58fe519bf5e0713b79ec9ea3fcc16ed03c7a4dc84c06fa9b9210
+```
 
 ## R24 sign height: restore one lower duplicate band
 
