@@ -161,8 +161,16 @@ def _catalog_entry_offset(img: bytes, wanted: str) -> int:
 def _vtoc_bitmap_offset(track: int, sec: int) -> tuple[int, int]:
     if not (0 <= track < TRACKS and 0 <= sec < SECTORS):
         raise ValueError("invalid VTOC sector coordinate")
-    byte_off = 0x38 + track * 4 + (sec // 8)
-    mask = 1 << (7 - (sec & 7))
+    # DOS 3.3 bitmap byte 0 maps sectors F..8 to bits 7..0;
+    # byte 1 maps sectors 7..0 to bits 7..0. A set bit means free.
+    if sec >= 8:
+        byte_index = 0
+        bit_index = sec - 8
+    else:
+        byte_index = 1
+        bit_index = sec
+    byte_off = 0x38 + track * 4 + byte_index
+    mask = 1 << bit_index
     return _sector_offset(17, 0) + byte_off, mask
 
 
@@ -210,11 +218,12 @@ def _grow_file_one_data_sector(img: bytes, name: str) -> bytes:
 
     pair_offset = None
     last_ts = sector(img, last_trk, last_sec)
+    last_nonzero = None
     for off in range(0x0C, 0x100 - 1, 2):
-        if last_ts[off] == 0 and last_ts[off + 1] == 0:
-            pair_offset = off
-            break
-    if pair_offset is None:
+        if last_ts[off] != 0:
+            last_nonzero = off
+    pair_offset = 0x0C if last_nonzero is None else last_nonzero + 2
+    if pair_offset >= 0x100 - 1:
         raise RuntimeError(
             f"{name}: last T/S-list sector has no free data-sector slot"
         )
