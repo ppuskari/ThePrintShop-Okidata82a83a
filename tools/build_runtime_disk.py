@@ -71,6 +71,11 @@ EXPECTED_ORIGINAL = {
         "length": 2737,
         "sha256": "cfa548eb4f950156c14639372f2681edbaa810e86f0945d73c24e0304e436353",
     },
+    "DRAW4": {
+        "load": 0x7800,
+        "length": None,
+        "sha256": None,
+    },
 }
 
 def sha256(data: bytes) -> str:
@@ -101,11 +106,17 @@ def read_dos_binary(img: bytes, name: str) -> tuple[int, bytes]:
 def verify_original(img: bytes) -> None:
     for name, expect in EXPECTED_ORIGINAL.items():
         load, payload = read_dos_binary(img, name)
+        digest = sha256(payload)
+        if expect["length"] is None or expect["sha256"] is None:
+            print(
+                f"  base {name}: DISCOVERY "
+                f"load=0x{load:04X} len={len(payload)} sha256={digest}"
+            )
+            continue
         if len(payload) != expect["length"]:
             raise RuntimeError(
                 f"{name}: expected {expect['length']} bytes, got {len(payload)}"
             )
-        digest = sha256(payload)
         if digest != expect["sha256"]:
             raise RuntimeError(
                 f"{name}: base runtime does not match the known source build; "
@@ -239,7 +250,7 @@ def main() -> int:
         )
 
     entries = {e["name"].upper(): e for e in catalog(img)}
-    for required in ("PRCOMS", "MENUS7", "DRAW1", "SYSLIB"):
+    for required in ("PRCOMS", "MENUS7", "DRAW1", "DRAW4", "SYSLIB"):
         if required not in entries:
             raise RuntimeError(f"base disk is missing required file {required}")
 
