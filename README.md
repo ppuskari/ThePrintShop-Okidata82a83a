@@ -132,6 +132,14 @@ The two hook locations are verified uniquely against the exact shipped
 DRAW4 byte patterns before patching, and the builder proves no pre-existing
 byte outside those two fixed ranges changes.
 
+R29 is intentionally an **Oki/type-5 banner hardware-test branch**. The
+fixed-size DRAW4 hook sites are shared by banner mode, so non-type-5 banner
+spacing is not preserved by this no-growth experiment. Do not use R29 for the
+planned ImageWriter/DMP comparison. Cards, signs, and stationery remain on
+the frozen R21/R26/R27 paths. After the Oki banner geometry is hardware-good,
+the final separate printer-type integration must isolate this behavior before
+merge/release.
+
 ## R27 stationery: restore the collapsed full-page advance
 
 R26 hardware validation finished sign mode at approximately 9.9 mm from both
