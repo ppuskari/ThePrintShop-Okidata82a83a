@@ -55,14 +55,11 @@ def main() -> int:
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
-    from inspect_printshop_source import catalog, file_sectors, textish
-    entries = list(catalog(d2))
-    for e in entries:
-        if e["name"].upper() == "BDRAW.S":
-            print("=== BDRAW.S SOURCE ===")
-            txt = textish(file_sectors(d2, e))
-            for j, line in enumerate(txt.splitlines()):
-                print(f"{j + 1:04d}: {line}")
+    print("=== PRCOMS SETLF SOURCE ===")
+    lines = prcoms_orig.splitlines()
+    for j in range(115, 180):
+        if j < len(lines):
+            print(f"{j + 1:04d}: {lines[j]}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
