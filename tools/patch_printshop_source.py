@@ -321,9 +321,8 @@ GCDRAW_SIGNSTEP_NEW = """ LDA SIDE
  LDA ROWCNT
  LSR
  BCS SR06
- ORA PIECE
- AND #$0F
- CMP #04
+ AND #$07
+ CMP #03
  BNE SR08A
  DEC ROWCNT
  BNE SR06"""
@@ -740,10 +739,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R22 base: golden R21 card geometry unchanged")
-    print("  R22 sign: omit five redundant doubled sign rows across 392 source lines")
-    print("  R22 sign trim: 5 x 15/144 inch = 13.229 mm, equivalent to 17.5 source lines")
-    print("  R22 sign top margin and complete source coverage remain unchanged")
+    print("  R23 base: golden R21 card geometry unchanged")
+    print("  R23 sign: omit eight redundant doubled sign bands across the full page")
+    print("  R23 sign trim: 8 x 15/144 inch = 21.167 mm, matching the card-page reduction")
+    print("  R23 sign top margin and complete source coverage remain unchanged")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
