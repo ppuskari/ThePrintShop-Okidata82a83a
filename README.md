@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 greeting-card geometry is frozen; R22 sign-height trim is CI-validated for hardware testing.**
+**R21 greeting-card geometry is frozen; R23 sign-height trim matches the card-page reduction and is ready for hardware testing.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -34,7 +34,47 @@ The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
 
-## R22 sign height: remove five redundant doubled rows
+## R23 sign height: match the greeting-card page reduction
+
+R22 used a smaller five-band sign reduction.  R23 supersedes that experiment
+and applies the same total physical vertical reduction that made the R21
+greeting-card page fit so well.
+
+The greeting-card path reduces each of its four 196-line pieces from 28 native
+output bands to 26, for a total reduction of eight native OkiGraph bands over
+the full sheet:
+
+```text
+4 pieces x (28 - 26) = 8 bands removed
+8 x 15/144 inch      = 120/144 inch
+                     = 0.833333 inch
+                     = 21.167 mm
+```
+
+R23 removes exactly eight redundant duplicate bands from the full sign:
+four from each 196-line sign half.  Sign mode normally prints every seven-line
+source band twice vertically, so dropping one of the two copies does not crop
+source artwork.  All 28 source batches in each half are still rendered.
+
+The four duplicate omissions in each half are distributed through the raster
+at regular intervals rather than taken from the beginning or end.  Therefore:
+
+- the R21/R22 sign top margin is unchanged;
+- all source graphics, text, and border rows remain represented;
+- the full sign is shortened by the same 21.167 mm as the total greeting-card
+  page reduction;
+- greeting-card SIDE=0/1 geometry and the R21 double-native fold remain
+  untouched.
+
+In source-line-equivalent terms, eight omitted duplicate seven-line bands at
+2x sign enlargement correspond to 28 source lines, but the important match is
+the physical output reduction: **eight native bands**, exactly the same total
+band reduction as the greeting-card sheet.
+
+R23 remains native-only.  `SETLF5` stays disabled and no `ESC % 9 n`
+fine-spacing commands are used.
+
+## R22 sign height: superseded five-band experiment
 
 R21 is retained unchanged for greeting cards.  The sign path was still using
 the original Print Shop SIDE=2 expansion: each 196-line half is decoded as 28
