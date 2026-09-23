@@ -240,6 +240,11 @@ def main() -> int:
         required=True,
         help="compiled GCDRAW.OKI payload; installed as runtime DRAW1",
     )
+    ap.add_argument(
+        "--bdraw-orig",
+        type=pathlib.Path,
+        help="diagnostic compiled BDRAW original for DRAW4 comparison",
+    )
     ap.add_argument("--output", type=pathlib.Path, required=True)
     args = ap.parse_args()
 
@@ -256,6 +261,29 @@ def main() -> int:
 
     print("Validating exact Print Shop runtime base...")
     verify_original(img)
+
+    if args.bdraw_orig:
+        draw4_load, draw4 = read_dos_binary(img, "DRAW4")
+        bdraw = args.bdraw_orig.read_bytes()
+        limit = min(len(draw4), len(bdraw))
+        diffs = [i for i in range(limit) if draw4[i] != bdraw[i]]
+        entry = find_entry(img, "DRAW4")
+        capacity = len(file_sector_locations(img, entry)) * SECTOR_SIZE - 4
+        print(
+            "  DRAW4/BDRAW diagnostic: "
+            f"runtime_len={len(draw4)} built_len={len(bdraw)} "
+            f"payload_capacity={capacity} diff_count={len(diffs)} "
+            f"first_diffs={diffs[:16]}"
+        )
+        if diffs:
+            for i in diffs[:16]:
+                print(
+                    f"    +0x{i:04X}: runtime={draw4[i]:02X} built={bdraw[i]:02X}"
+                )
+        print(
+            f"    runtime_tail={draw4[-32:].hex()} "
+            f"built_tail={bdraw[-32:].hex()}"
+        )
 
     prcoms = args.prcoms.read_bytes()
     menus7 = args.menus7.read_bytes()
