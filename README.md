@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 double-native-fold experiment: CI-validated; hardware validation is next.**
+**R21 greeting-card geometry is frozen; R24 restores one lower sign band after the R23 hardware test and is ready for validation.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,192 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R24 sign height: restore one lower duplicate band
+
+R23 proved that the eight-band reduction was almost exactly the right physical
+height, but hardware testing showed the final lower border band was visually
+too aggressive: the inner line printed while the outer line was effectively
+lost.  One additional native seven-pin graphics band should complete that
+bottom border and still retain the excellent vertical fit.
+
+R24 therefore changes only the sign duplicate-removal cadence.  It removes
+**seven** redundant duplicate OkiGraph bands over the full sign instead of
+eight:
+
+```text
+R23 reduction: 8 x 15/144 inch = 21.167 mm
+R24 reduction: 7 x 15/144 inch = 18.521 mm
+difference:                         +2.646 mm height restored
+```
+
+The first 196-line sign half still omits four duplicate bands.  The second
+196-line half omits only three.  The omitted copies remain distributed through
+the raster, and the final portion of the second half is no longer one of the
+skip locations.  This preserves complete source coverage and restores one
+native output band near the lower end rather than changing the top margin.
+
+Greeting-card SIDE=0/1 geometry remains byte-for-byte on the frozen R21 path.
+`SETLF5` remains disabled; R24 uses only the proven native OkiGraph
+`$03 $0E` vertical feed.
+
+Validated R24 overlays:
+
+```text
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+GCDRAW.OKI -> runtime DRAW1
+length 2812
+SHA256 9f74176a45823ee9544ce3a7aae2970e90252786f706960e309af481ace4524d
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+```
+
+Validated R24 runtime image:
+
+```text
+size   143360 bytes
+SHA256 98e23b7191047fe7d427f645e5847e57ca738974723cbe9d0b647b655168cd04
+```
+
+## R23 sign height: superseded eight-band experiment
+
+R22 used a smaller five-band sign reduction.  R23 supersedes that experiment
+and applies the same total physical vertical reduction that made the R21
+greeting-card page fit so well.
+
+The greeting-card path reduces each of its four 196-line pieces from 28 native
+output bands to 26, for a total reduction of eight native OkiGraph bands over
+the full sheet:
+
+```text
+4 pieces x (28 - 26) = 8 bands removed
+8 x 15/144 inch      = 120/144 inch
+                     = 0.833333 inch
+                     = 21.167 mm
+```
+
+R23 removes exactly eight redundant duplicate bands from the full sign:
+four from each 196-line sign half.  Sign mode normally prints every seven-line
+source band twice vertically, so dropping one of the two copies does not crop
+source artwork.  All 28 source batches in each half are still rendered.
+
+The four duplicate omissions in each half are distributed through the raster
+at regular intervals rather than taken from the beginning or end.  Therefore:
+
+- the R21/R22 sign top margin is unchanged;
+- all source graphics, text, and border rows remain represented;
+- the full sign is shortened by the same 21.167 mm as the total greeting-card
+  page reduction;
+- greeting-card SIDE=0/1 geometry and the R21 double-native fold remain
+  untouched.
+
+In source-line-equivalent terms, eight omitted duplicate seven-line bands at
+2x sign enlargement correspond to 28 source lines, but the important match is
+the physical output reduction: **eight native bands**, exactly the same total
+band reduction as the greeting-card sheet.
+
+R23 remains native-only.  `SETLF5` stays disabled and no `ESC % 9 n`
+fine-spacing commands are used.
+
+Validated R23 overlays:
+
+```text
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+GCDRAW.OKI -> runtime DRAW1
+length 2810
+SHA256 00fb0aed8c2a80b145e3316e67b8db1727948808a07dd58ce42999e1729801b0
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+```
+
+Validated R23 runtime image:
+
+```text
+size   143360 bytes
+SHA256 e937060c3c945a679a65f6e080fee14ea7099937fc2ac5660061b2a9c2ace287
+```
+
+## R22 sign height: superseded five-band experiment
+
+R21 is retained unchanged for greeting cards.  The sign path was still using
+the original Print Shop SIDE=2 expansion: each 196-line half is decoded as 28
+seven-line source batches and each source batch is printed twice, producing
+56 native OkiGraph bands per half (112 bands for the full sign).
+
+That means the sign had *not* received the vertical compression applied while
+tuning the card path.
+
+R22 keeps the sign's existing top position but removes five redundant
+second copies of already-rendered sign bands across the full 392-line source:
+
+```text
+first 196-line half:   omit 2 duplicate bands
+second 196-line half:  omit 3 duplicate bands
+total:                 omit 5 duplicate bands
+```
+
+Because a sign source band represents seven source lines and is normally
+doubled vertically, five removed duplicate bands are equivalent to:
+
+```text
+5 * 7 / 2 = 17.5 source lines
+```
+
+which is effectively the requested 18-line reduction.
+
+No source graphics are cropped.  The code advances to the next seven-line
+source batch whenever one duplicate is omitted, so all 28 source batches in
+each half are still rendered.  The omitted duplicates are distributed through
+the sign rather than removed from the top or bottom.
+
+The physical height reduction is exactly five already-proven native OkiGraph
+feeds:
+
+```text
+5 * 15/144 inch = 75/144 inch
+                 = 0.520833 inch
+                 = 13.229 mm
+```
+
+The top margin is therefore unchanged from R21.  Greeting-card SIDE=0/1
+geometry, the R21 fold spacing, PRCOMS, and the R14 CR-only TEST PAPER POSITION
+patch are unchanged.
+
+Validated R22 overlays:
+
+```text
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+GCDRAW.OKI -> runtime DRAW1
+length 2812
+SHA256 194fcdecd03dd9589e3c722c707e1ba007da1f3763a01cd090243ca32cc0cf61
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+```
+
+Validated R22 runtime image:
+
+```text
+size   143360 bytes
+SHA256 1f7b71bdbcecf6269db92e7050c68da53ee49b64f7d5b4c2188c1dc88bae60b4
+```
+
+R22 DRAW1 is exactly 2812 bytes, the maximum payload that still fits its
+existing 2816-byte DOS binary allocation including the four-byte header.
 
 ## R21 double-native fold
 
