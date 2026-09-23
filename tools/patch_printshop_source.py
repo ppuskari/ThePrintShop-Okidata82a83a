@@ -451,6 +451,10 @@ def patch_gcdraw(text: str) -> str:
         "GCDRAW.S type-5 card row resampler",
     )
 
+def patch_bdraw(text: str) -> str:
+    """R29 banner overlay patch; populated after source-layout discovery."""
+    return text
+
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
 
