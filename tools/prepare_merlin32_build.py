@@ -10,6 +10,7 @@ import re
 from patch_printshop_source import (
     binary_source_text,
     load_image,
+    patch_bdraw,
     patch_gcdraw,
     patch_menus,
     patch_prcoms,
@@ -17,6 +18,8 @@ from patch_printshop_source import (
 
 
 def normalize_bigmac(text: str) -> str:
+    # Big Mac accepts punctuation character immediates such as #','.
+    # Merlin32 wants these expressed numerically.
     return re.sub(
         r"#'([^'])'",
         lambda m: "#$%02X" % ord(m.group(1)),
@@ -39,21 +42,6 @@ def add_sav(text: str, output_name: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def show_banner_context(text: str) -> None:
-    lines = text.splitlines()
-    for label in ("BSTR2", "BSTR6", "BICON2"):
-        for i, line in enumerate(lines):
-            if line.startswith(label):
-                lo = max(0, i - 12)
-                hi = min(len(lines), i + 28)
-                print(f"--- BDRAW {label} context lines {lo + 1}-{hi} ---")
-                for n in range(lo, hi):
-                    print(f"{n + 1:04d}: {lines[n]}")
-                break
-        else:
-            raise RuntimeError(f"BDRAW.S label {label} not found")
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--output-dir", type=pathlib.Path, required=True)
@@ -64,16 +52,16 @@ def main() -> int:
 
     d1 = load_image(None, 0)
     d2 = load_image(None, 1)
+
     prcoms_orig = binary_source_text(d1, "PRCOMS.S")
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
     bdraw_orig = binary_source_text(d2, "BDRAW.S")
 
-    show_banner_context(bdraw_orig)
-
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
     gcdraw_oki = patch_gcdraw(gcdraw_orig)
+    bdraw_oki = patch_bdraw(bdraw_orig)
 
     products = {
         "PRCOMS.ORIG.BUILD.S": add_sav(prcoms_orig, "PRCOMS.ORIG"),
@@ -83,6 +71,7 @@ def main() -> int:
         "GCDRAW.ORIG.BUILD.S": add_sav(gcdraw_orig, "GCDRAW.ORIG"),
         "GCDRAW.OKI.BUILD.S": add_sav(gcdraw_oki, "GCDRAW.OKI"),
         "BDRAW.ORIG.BUILD.S": add_sav(bdraw_orig, "BDRAW.ORIG"),
+        "BDRAW.OKI.BUILD.S": add_sav(bdraw_oki, "BDRAW.OKI"),
     }
 
     for name, text in products.items():
