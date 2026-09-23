@@ -251,7 +251,6 @@ GCDRAW_DUMP_NEW = """DUMP2 STX BADDR
  LDY #00
  JSR SENDGC
  LDX CREDBUF-1
- BEQ ROW
  DEX
  BNE ROW
  INC CREDBUF-1
@@ -307,12 +306,32 @@ SR08A DEC ROWCNT
  BNE SR09
  RTS"""
 
+GCDRAW_SIGNSTEP_OLD = """ LDA SIDE
+ LSR
+ BCS SR07
+ BEQ SR06
+ LDA ROWCNT
+ LSR
+ BCC SR08A"""
+
+GCDRAW_SIGNSTEP_NEW = """ LDA SIDE
+ LSR
+ BCS SR07
+ BEQ SR06
+ LDA ROWCNT
+ LSR
+ BCS SR06
+ AND #$07
+ CMP #05
+ BNE SR08A
+ DEC ROWCNT
+ BNE SR06"""
+
 GCDRAW_MOVE_NEW = """SR06 LDX #00
  BEQ R9MC
 *
 SR07 LDX #02
 R9MC JSR R9MOVE
- JMP SR08A
 *
 SR08A DEC ROWCNT
  BNE SR09
@@ -342,8 +361,8 @@ GCDRAW_HELPER_NEW = """ BCS SR02
 * X=0/2 SELECTS + / - SOURCE DIRECTION.
 *
 R9MOVE LDA SIDE
- CMP #02
- BEQ R9MN
+ LSR
+ BNE R9MN
  LDA ROWCNT
  CMP #15
  BEQ R9MS
@@ -369,17 +388,14 @@ GCDRAW_LF36_OLD = """LF36A LDX #02
  INY
 LF36B JMP CRLF"""
 
-GCDRAW_LF36_NEW = """LF36A LDX #02
- LDY SIDE
- BEQ R21S0
- CPY #01
- BNE LF36B
- DEX
- DEX
+GCDRAW_LF36_NEW = """LF36A LDY SIDE
+ LDX R22LFX,Y
  INY
- BNE LF36B
-R21S0 INY
-LF36B JMP CRLF"""
+ CPY #03
+ BCC LF36B
+ DEY
+LF36B JMP CRLF
+R22LFX DFB 2,0,2"""
 
 
 
@@ -410,9 +426,15 @@ def patch_gcdraw(text: str) -> str:
     )
     patched = replace_once(
         patched,
+        GCDRAW_SIGNSTEP_OLD,
+        GCDRAW_SIGNSTEP_NEW,
+        "GCDRAW.S type-5 sign duplicate-row trim",
+    )
+    patched = replace_once(
+        patched,
         GCDRAW_MOVE_OLD,
         GCDRAW_MOVE_NEW,
-        "GCDRAW.S type-5 card source stepping",
+        "GCDRAW.S type-5 card/source stepping",
     )
     patched = replace_once(
         patched,
@@ -717,10 +739,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R21 base: hardware-good R20 native-only transport")
-    print("  R21 top: unchanged from R20 at one native 15/144 feed")
-    print("  R21 fold: two native 15/144 feeds after SIDE=1 panel")
-    print("  R21 half-panel joins and SIDE=0/SIDE=2 behavior unchanged")
+    print("  R26 base: golden R21 card geometry unchanged")
+    print("  R26 sign: omit six redundant doubled sign bands, three per 196-line half")
+    print("  R26 sign trim: 6 x 15/144 inch = 15.875 mm")
+    print("  R26 restores one duplicate band in the first half, shifting the lower sign down")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
