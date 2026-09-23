@@ -101,6 +101,66 @@ size   143360 bytes
 SHA256 e21bd92bbab332133ea7d0673674432b13a6e02a783b4dbe987dee3fc51e38bf
 ```
 
+## R25 sign vertical centering: one native feed down
+
+R24 hardware measurement put the sign at approximately 8 mm from the top
+border and 12 mm from the bottom border.  The sign height itself is retained
+unchanged.  R25 moves the entire sign downward by exactly one proven native
+OkiGraph graphics feed:
+
+```text
+$03 $0E = 15/144 inch = 2.646 mm
+
+predicted from the R24 measurements:
+top    8.0 + 2.646 = 10.646 mm
+bottom 12.0 - 2.646 = 9.354 mm
+```
+
+This is sign-only.  The frozen R21 greeting-card geometry is unchanged, as is
+R24's seven-band sign-height reduction.
+
+The historical GCDRAW startup had a three-byte `JSR LF36`.  R12 removed that
+common startup feed.  R25 uses the same three-byte slot for `JSR $6ECA`,
+where a small helper appended to MENUS7 checks `PS_MAIN_TYPE=$95F5`.
+Only type 2 (sign) enters graphics with `SENDGC X=0,Y=0` and then requests
+one `CRLF X=0,Y=1`, which the proven type-5 path emits as one native
+`$03 $0E` graphics feed.  Other Print Shop modes return immediately.
+
+The helper begins at `$6ECA`, exactly the old end of the 3018-byte MENUS7
+overlay loaded at `$6300`.  The R25 MENUS7 overlay is 3037 bytes after the
+19-byte helper is inserted immediately before its terminal `END` directive.
+
+To make the startup call fit without growing DRAW1 past its DOS allocation,
+R25 removes one guaranteed branch in the sign duplicate-skip path and
+compacts the existing LF36 SIDE mapping using `GCNUMH`.  Those changes are
+behavior-preserving for the R24/R21 paths.
+
+R25 remains native-only: `SETLF5` stays disabled and no `ESC % 9 n`
+fine-spacing commands are emitted.
+
+Validated R25 overlays:
+
+```text
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+MENUS7.OKI
+length 3037
+SHA256 f564dcc57a958188fa2fcd58abb64d3a21c3cc16a8ff41b4c156166c117a9bae
+
+GCDRAW.OKI -> runtime DRAW1
+length 2811
+SHA256 41f8468c372f6f72e8134693581a5bb10947d82bd1fa6dc685248ab87d655c04
+```
+
+Validated R25 runtime image:
+
+```text
+size   143360 bytes
+SHA256 e21bd92bbab332133ea7d0673674432b13a6e02a783b4dbe987dee3fc51e38bf
+```
+
 ## R24 sign height: restore one lower duplicate band
 
 R23 proved that the eight-band reduction was almost exactly the right physical
