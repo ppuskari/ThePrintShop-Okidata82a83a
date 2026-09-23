@@ -457,12 +457,14 @@ BDRAW_TEXT_OLD = """BSTR6 LDX #00
 
 BDRAW_TEXT_NEW = """BSTR6 JSR R29BTXT"""
 
-BDRAW_ICON_OLD = """BICON2 LDA #01
- TAY
- AND XCUR
- ORA #06
- TAX
- JSR CRLF"""
+BDRAW_ICON_OLD = re.compile(
+    r"(?m)^BICON2[ \\t]+LDA[ \\t]+#(?:\\$)?0?1[ \\t]*\\n"
+    r"[ \\t]+TAY[ \\t]*\\n"
+    r"[ \\t]+AND[ \\t]+XCUR[ \\t]*\\n"
+    r"[ \\t]+ORA[ \\t]+#(?:\\$)?0?6[ \\t]*\\n"
+    r"[ \\t]+TAX[ \\t]*\\n"
+    r"[ \\t]+JSR[ \\t]+CRLF[ \\t]*$"
+)
 
 BDRAW_ICON_NEW = """BICON2 JSR R29BICO"""
 
@@ -525,12 +527,13 @@ def patch_bdraw(text: str) -> str:
         BDRAW_TEXT_NEW,
         "BDRAW.S banner text spacing hook",
     )
-    patched = replace_once(
-        patched,
-        BDRAW_ICON_OLD,
-        BDRAW_ICON_NEW,
-        "BDRAW.S banner icon spacing hook",
-    )
+    icon_matches = list(BDRAW_ICON_OLD.finditer(patched))
+    if len(icon_matches) != 1:
+        raise RuntimeError(
+            "BDRAW.S banner icon spacing hook: expected exactly one "
+            f"BICON2/XCUR/CRLF sequence, found {len(icon_matches)}"
+        )
+    patched = BDRAW_ICON_OLD.sub(BDRAW_ICON_NEW, patched, count=1)
 
     lines = patched.splitlines()
     end_index = next(
