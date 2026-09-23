@@ -371,13 +371,14 @@ LF36B JMP CRLF"""
 
 GCDRAW_LF36_NEW = """LF36A LDX #02
  LDY SIDE
- BEQ R20S0
+ BEQ R21S0
  CPY #01
  BNE LF36B
  DEX
  DEX
- BEQ LF36B
-R20S0 INY
+ INY
+ BNE LF36B
+R21S0 INY
 LF36B JMP CRLF"""
 
 
@@ -716,10 +717,10 @@ def main() -> int:
     print("Print Shop v2 OkiGraph I source patch: PASS")
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
-    print("  R20 base: hardware-good R16 PRCOMS; SETLF5 stays disabled")
-    print("  R20 top: one native 15/144 OkiGraph feed instead of two")
-    print("  R20 fold: one native 15/144 feed only after SIDE=1 panel")
-    print("  R20 all half-panel joins and SIDE=0/SIDE=2 behavior otherwise unchanged")
+    print("  R21 base: hardware-good R20 native-only transport")
+    print("  R21 top: unchanged from R20 at one native 15/144 feed")
+    print("  R21 fold: two native 15/144 feeds after SIDE=1 panel")
+    print("  R21 half-panel joins and SIDE=0/SIDE=2 behavior unchanged")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
