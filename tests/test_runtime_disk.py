@@ -53,6 +53,22 @@ BICON2 LDA #01
         self.assertNotIn("BSTR6 LDX #00", patched)
         self.assertLess(patched.index("R29BTXT"), patched.rindex("END"))
 
+    def test_bdraw_patch_accepts_bigmac_numeric_variants(self):
+        source = """ ORG $7800
+BSTR6 LDX #00
+ LDY #01
+ JSR CRLF
+BICON2\tLDA\t#1
+\tTAY
+\tAND\tXCUR
+\tORA\t#6
+\tTAX
+\tJSR\tCRLF
+ END
+"""
+        patched = patch_bdraw(source)
+        self.assertIn("BICON2 JSR R29BICO", patched)
+
     def test_bdraw_patch_rejects_missing_banner_sites(self):
         with self.assertRaises(RuntimeError):
             patch_bdraw(" END\n")
