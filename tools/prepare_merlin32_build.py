@@ -56,13 +56,9 @@ def main() -> int:
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
     glines = gcdraw_orig.splitlines()
-    print("=== GCDRAW entry/caller flow 80-190 ===")
-    for j in range(79, min(len(glines), 190)):
+    print("=== GCDRAW raster movement 1440-1515 ===")
+    for j in range(1439, min(len(glines), 1515)):
         print(f"{j + 1:04d}: {glines[j]}")
-    print("=== all DOALL references ===")
-    for i, line in enumerate(glines):
-        if "DOALL" in line.upper():
-            print(f"{i + 1:04d}: {line}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
