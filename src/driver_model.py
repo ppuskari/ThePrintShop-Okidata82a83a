@@ -150,25 +150,25 @@ def r9_card_band_starts() -> list[int]:
     return starts
 
 
-def banner_text_native_feeds(call_index: int) -> int:
-    """R29 type-5 banner-text native-feed cadence.
 
-    After the initial banner row, every third spacing call uses two native
-    15/144-inch OkiGraph feeds; the other calls use one.  Three source-slice
-    intervals therefore advance 15+15+30 = 60/144 inch, exactly matching the
-    historical 3 * 20/144-inch target without ESC % 9 n.
+def banner_text_x(bitcnt: int) -> int:
+    """R29 banner-text X value derived from Print Shop BITCNT.
+
+    BSTR6 preserves Y=1. The shared DRAW4 helper decrements BITCNT's 8..1
+    sequence into X=7..0 before tail-jumping to PRCOMS CRLF.
     """
-    if call_index < 0:
-        raise ValueError("banner text call index must be non-negative")
-    return 2 if ((call_index + 1) % 3) == 0 else 1
+    if not 1 <= bitcnt <= 8:
+        raise ValueError("BITCNT must be in 1..8")
+    return bitcnt - 1
 
 
 def banner_icon_x(xcur: int) -> int:
-    """R29 type-5 banner-icon merge selector.
+    """R29 banner-icon X value derived from Print Shop XCUR.
 
-    Two source slices out of every fifteen are overstruck at zero feed
-    (X=2); the other thirteen use one native OkiGraph feed (X=0).
+    Every eighth source slice uses X=2 (zero-feed overstrike); the other
+    seven use X=0 (one native 15/144-inch OkiGraph feed).
     """
     if xcur < 0:
         raise ValueError("banner XCUR must be non-negative")
-    return 2 if (xcur % 15) in (0, 8) else 0
+    return 2 if (xcur & 7) == 0 else 0
+
