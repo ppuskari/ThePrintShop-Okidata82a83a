@@ -37,9 +37,9 @@ jobs:
             throw "Unexpected runtime disk size $($Info.Length)"
           }
           Get-FileHash -Algorithm SHA256 $Disk
-      - name: Upload deployable R27 disk
+      - name: Upload deployable R29 disk
         uses: actions/upload-artifact@v4
         with:
-          name: PrintShop-Okidata82a83a-OkiGraphI-R27
+          name: PrintShop-Okidata82a83a-OkiGraphI-R29
           path: build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
           if-no-files-found: error

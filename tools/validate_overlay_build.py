@@ -21,6 +21,7 @@ def digest(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--build-dir", type=pathlib.Path, required=True)

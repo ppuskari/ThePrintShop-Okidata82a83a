@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 greeting cards and R26 signs are hardware-golden; R27 repairs the stationery full-page advance with native OkiGraph spacing.**
+**R21 greeting cards, R26 signs, and R27 stationery are hardware-golden; R29 isolates banner text/icon geometry fixes inside DRAW4.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,112 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R29 banner: in-place DRAW4 geometry correction
+
+R29 rebases directly from the hardware-good R27 runtime and deliberately
+avoids every memory/allocation mechanism that destabilized the rejected R28
+experiments.
+
+The runtime basis is the exact shipped DRAW4 binary:
+
+```text
+load    $7800
+length  1012
+SHA256  787a97a6b6441724da019edf6ec586df3cf56acc61047db0b402553ac03699e4
+```
+
+DRAW4 already owns four 256-byte DOS data sectors. Its four-byte DOS binary
+header plus 1012-byte payload consumes 1016 of those 1024 bytes, leaving
+exactly eight bytes after EOF in the existing allocation. R29 makes those
+eight bytes loadable and uses them as one shared helper:
+
+```text
+$7BF4  F0 02       BEQ icon_merge
+$7BF6  A2 01       LDX #1
+$7BF8  CA          DEX
+$7BF9  4C 03 18    JMP $1803       ; original PRCOMS CRLF
+```
+
+The final DRAW4 payload is exactly 1020 bytes:
+
+```text
+DOS header  4
+payload  1020
+total    1024 bytes = original four-sector allocation exactly
+RAM      $7800-$7BFB
+```
+
+No existing DRAW4 address moves. No sector is allocated. The VTOC and T/S
+list are untouched. Resident SYSLIB remains at its historical 4773-byte
+length with only the already-proven R14 TEST PAPER POSITION patch.
+
+### Banner text state
+
+The historical BSTR6 seven-byte sequence is replaced in-place, length for
+length:
+
+```asm
+LDX BITCNT          ; $58, Print Shop state 8..1
+LDY #1
+JSR $7BF8           ; DEX / JMP CRLF
+```
+
+This maps BITCNT 8..1 to X=7..0. Under the frozen R27 type-5 CRLF behavior,
+an eight-slice group advances:
+
+```text
+6 ordinary one-line feeds  = 6 x 24/144
+X=2 zero-feed merge        = 0
+X=0 native OkiGraph feed   = 15/144
+total                      = 159/144
+
+historical target          = 8 x 20/144 = 160/144
+error                      = -0.625%
+```
+
+There is no new phase variable; Print Shop's existing BITCNT is the state.
+
+### Banner icon state
+
+The historical eleven-byte BICON2 sequence is also replaced in-place,
+length for length:
+
+```asm
+LDX #3
+LDY #1
+LDA XCUR            ; $54
+AND #7
+JSR $7BF4
+```
+
+JSR preserves the Z flag from AND #7. At the helper, every XCUR multiple of
+eight keeps X=3 and the shared DEX maps it to X=2, producing a zero-feed
+overstrike. All other slices first become X=1 and DEX maps them to X=0,
+producing one native 15/144-inch OkiGraph feed.
+
+Across the 88-slice icon:
+
+```text
+11 zero-feed merges
+77 native feeds
+77 x 15/144 = 1155/144 inch
+
+historical target = 88 x 13/144 = 1144/144 inch
+error             = +11/144 inch = +1.94 mm (+0.96%)
+```
+
+The two hook locations are verified uniquely against the exact shipped
+DRAW4 byte patterns before patching, and the builder proves no pre-existing
+byte outside those two fixed ranges changes.
+
+R29 is intentionally an **Oki/type-5 banner hardware-test branch**. The
+fixed-size DRAW4 hook sites are shared by banner mode, so non-type-5 banner
+spacing is not preserved by this no-growth experiment. Do not use R29 for the
+planned ImageWriter/DMP comparison. Cards, signs, and stationery remain on
+the frozen R21/R26/R27 paths. After the Oki banner geometry is hardware-good,
+the final separate printer-type integration must isolate this behavior before
+merge/release.
 
 ## R27 stationery: restore the collapsed full-page advance
 

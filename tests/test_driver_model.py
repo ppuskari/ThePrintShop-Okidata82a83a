@@ -6,6 +6,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from driver_model import (  # noqa: E402
+    banner_icon_x,
+    banner_text_x,
     crlf_type5,
     encode_columns,
     encode_pair,
@@ -58,6 +60,32 @@ class DriverModelTests(unittest.TestCase):
         self.assertEqual(stream, b"\x03\x02\x0d")
         self.assertFalse(state)
         self.assertNotIn(0x0A, stream)
+
+    def test_r29_banner_text_bitcnt_state_and_ratio(self):
+        xs = [banner_text_x(bitcnt) for bitcnt in range(8, 0, -1)]
+        self.assertEqual(xs, [7, 6, 5, 4, 3, 2, 1, 0])
+
+        # Under the frozen R27 type-5 CRLF semantics:
+        # six nonzero/non-2 values -> one 24/144 text LF each,
+        # X=2 -> zero-feed overstrike,
+        # X=0 -> one native 15/144 graphics feed.
+        total_144 = 6 * 24 + 15
+        self.assertEqual(total_144, 159)
+        self.assertEqual(8 * 20, 160)
+
+    def test_r29_banner_icon_xcur_state_and_ratio(self):
+        xs = [banner_icon_x(i) for i in range(88)]
+        merges = [i for i, x in enumerate(xs) if x == 2]
+        self.assertEqual(
+            merges,
+            [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80],
+        )
+        self.assertEqual(xs.count(0), 77)
+        self.assertEqual(xs.count(2), 11)
+
+        # 77 native feeds vs historical 88 * 13/144 target.
+        self.assertEqual(xs.count(0) * 15, 1155)
+        self.assertEqual(88 * 13, 1144)
 
     def test_r27_stationery_mov575_uses_native_feeds(self):
         stream1, state = crlf_type5(

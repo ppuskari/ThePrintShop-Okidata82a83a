@@ -451,6 +451,140 @@ def patch_gcdraw(text: str) -> str:
         "GCDRAW.S type-5 card row resampler",
     )
 
+BDRAW_TEXT_OLD = """BSTR6 LDX #00
+ LDY #01
+ JSR CRLF"""
+
+BDRAW_TEXT_NEW = """BSTR6 JSR R29BTXT"""
+
+BDRAW_ICON_NEW = """BICON2 JSR R29BICO"""
+
+
+def replace_bdraw_icon_hook(text: str) -> str:
+    """Replace the single historical BICON2 spacing block.
+
+    This is intentionally line-oriented rather than regex-format-dependent.
+    The 1987 Big Mac source varies whitespace and numeric spelling, but the
+    semantic landmarks are stable: BICON2, XCUR, TAX, and the terminating
+    JSR CRLF.
+    """
+    lines = text.splitlines()
+    starts = [
+        i for i, line in enumerate(lines)
+        if line.lstrip().startswith("BICON2")
+    ]
+    if len(starts) != 1:
+        raise RuntimeError(
+            "BDRAW.S banner icon spacing hook: expected exactly one "
+            f"BICON2 label, found {len(starts)}"
+        )
+
+    start = starts[0]
+    end = None
+    for i in range(start, min(start + 12, len(lines))):
+        compact = " ".join(lines[i].strip().split()).upper()
+        if compact == "JSR CRLF":
+            end = i
+            break
+
+    if end is None:
+        raise RuntimeError(
+            "BDRAW.S banner icon spacing hook: BICON2 block has no "
+            "nearby JSR CRLF terminator"
+        )
+
+    block = "\n".join(
+        " ".join(line.strip().split()).upper()
+        for line in lines[start:end + 1]
+    )
+    required = ("LDA", "TAY", "XCUR", "ORA", "TAX", "JSR CRLF")
+    missing = [token for token in required if token not in block]
+    if missing:
+        raise RuntimeError(
+            "BDRAW.S banner icon spacing hook: BICON2 block is missing "
+            + ", ".join(missing)
+        )
+
+    lines[start:end + 1] = [BDRAW_ICON_NEW]
+    suffix = "\n" if text.endswith("\n") else ""
+    return "\n".join(lines) + suffix
+
+BDRAW_R29_HELPERS = """*
+* R29 OKIGRAPH I BANNER GEOMETRY.
+* TEXT: 3 SOURCE SLICES -> 4 NATIVE 15/144 FEEDS (1,1,2).
+* ICON: 15 SOURCE SLICES -> 13 POSITIONS BY TWO EVEN ZERO-FEED MERGES.
+* NON-TYPE-5 PRINTERS RETAIN THE ORIGINAL CRLF PARAMETERS.
+*
+R29BTXT LDA $95F1
+ CMP #05
+ BNE R29TOLD
+ INC R29TPH
+ LDA R29TPH
+ CMP #03
+ BCC R29TONE
+ LDA #00
+ STA R29TPH
+ LDY #02
+ BNE R29TGO
+R29TONE LDY #01
+R29TGO LDX #00
+ JMP CRLF
+R29TOLD LDX #00
+ LDY #01
+ JMP CRLF
+R29TPH HEX 00
+*
+R29BICO LDA $95F1
+ CMP #05
+ BNE R29IOLD
+ LDA XCUR
+R29IMOD CMP #15
+ BCC R29IREM
+ SBC #15
+ BCS R29IMOD
+R29IREM CMP #00
+ BEQ R29IMERG
+ CMP #08
+ BEQ R29IMERG
+ LDX #00
+ LDY #01
+ JMP CRLF
+R29IMERG LDX #02
+ LDY #01
+ JMP CRLF
+R29IOLD LDA #01
+ TAY
+ AND XCUR
+ ORA #06
+ TAX
+ JMP CRLF
+*"""
+
+
+def patch_bdraw(text: str) -> str:
+    patched = replace_once(
+        text,
+        BDRAW_TEXT_OLD,
+        BDRAW_TEXT_NEW,
+        "BDRAW.S banner text spacing hook",
+    )
+    patched = replace_bdraw_icon_hook(patched)
+
+    lines = patched.splitlines()
+    end_index = next(
+        (
+            i for i in range(len(lines) - 1, -1, -1)
+            if lines[i].strip().upper() == "END"
+        ),
+        None,
+    )
+    if end_index is None:
+        raise RuntimeError("BDRAW.S has no final END directive")
+    helper_lines = BDRAW_R29_HELPERS.splitlines()
+    lines[end_index:end_index] = helper_lines
+    return "\n".join(lines) + ("\n" if patched.endswith("\n") else "")
+
+
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
 
@@ -726,13 +860,16 @@ def main() -> int:
     prcoms_info = binary_source_info(disk1, "PRCOMS.S")
     menus7_info = binary_source_info(disk2, "MENUS7.S")
     gcdraw_info = binary_source_info(disk2, "GCDRAW.S")
+    bdraw_info = binary_source_info(disk2, "BDRAW.S")
     prcoms = prcoms_info["text"]
     menus7 = menus7_info["text"]
     gcdraw = gcdraw_info["text"]
+    bdraw = bdraw_info["text"]
 
     patched_prcoms = patch_prcoms(prcoms)
     patched_menus7 = patch_menus(menus7)
     patched_gcdraw = patch_gcdraw(gcdraw)
+    patched_bdraw = patch_bdraw(bdraw)
 
     # These are the two invariants that keep the first hardware build
     # deliberately low-risk.
@@ -745,6 +882,9 @@ def main() -> int:
     print("  R27 stationery: type-5 X=40/Y=14 becomes 68 native graphics feeds")
     print("  R27 native move: 68 x 15/144 inch = 179.917 mm")
     print("  R27 preserves following X=8 and X=7 text-feed calls")
+    print("  R29 banner text: native feed cadence 1,1,2 = exact 20/144 average")
+    print("  R29 banner icon: 15 source slices -> 13 native positions")
+    print("  R29 banner changes are confined to assembled BDRAW/DRAW4")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
@@ -755,6 +895,8 @@ def main() -> int:
     print(f"  MENUS7 decoded SHA256 after : {sha256_text(patched_menus7)}")
     print(f"  GCDRAW decoded SHA256 before: {sha256_text(gcdraw)}")
     print(f"  GCDRAW decoded SHA256 after : {sha256_text(patched_gcdraw)}")
+    print(f"  BDRAW decoded SHA256 before : {sha256_text(bdraw)}")
+    print(f"  BDRAW decoded SHA256 after  : {sha256_text(patched_bdraw)}")
 
     if args.output_dir:
         args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -766,6 +908,9 @@ def main() -> int:
         )
         (args.output_dir / "GCDRAW.OKI.S").write_text(
             patched_gcdraw, encoding="ascii", newline="\n"
+        )
+        (args.output_dir / "BDRAW.OKI.S").write_text(
+            patched_bdraw, encoding="ascii", newline="\n"
         )
         print(f"  wrote decoded patched source to: {args.output_dir}")
 

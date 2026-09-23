@@ -148,3 +148,27 @@ def r9_card_band_starts() -> list[int]:
         rowcnt -= 1
         starts.append(source)
     return starts
+
+
+
+def banner_text_x(bitcnt: int) -> int:
+    """R29 banner-text X value derived from Print Shop BITCNT.
+
+    BSTR6 preserves Y=1. The shared DRAW4 helper decrements BITCNT's 8..1
+    sequence into X=7..0 before tail-jumping to PRCOMS CRLF.
+    """
+    if not 1 <= bitcnt <= 8:
+        raise ValueError("BITCNT must be in 1..8")
+    return bitcnt - 1
+
+
+def banner_icon_x(xcur: int) -> int:
+    """R29 banner-icon X value derived from Print Shop XCUR.
+
+    Every eighth source slice uses X=2 (zero-feed overstrike); the other
+    seven use X=0 (one native 15/144-inch OkiGraph feed).
+    """
+    if xcur < 0:
+        raise ValueError("banner XCUR must be non-negative")
+    return 2 if (xcur & 7) == 0 else 0
+
