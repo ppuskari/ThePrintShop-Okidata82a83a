@@ -585,7 +585,11 @@ def patch_menus(text: str) -> str:
         MENUS_INIT_NEW,
         "MENUS7.S type-5 state initialization",
     )
-    return patched.rstrip() + "\n" + MENUS_R25_HELPER + "\n"
+    ends = list(re.finditer(r"(?m)^[ \\t]*END\\b.*$", patched))
+    if not ends:
+        raise RuntimeError("MENUS7.S: END directive not found")
+    m = ends[-1]
+    return patched[:m.start()] + MENUS_R25_HELPER + "\n" + patched[m.start():]
 
 
 def load_image(path: pathlib.Path | None, disk_index: int) -> bytes:
