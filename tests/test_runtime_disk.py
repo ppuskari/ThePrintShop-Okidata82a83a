@@ -11,11 +11,16 @@ from build_runtime_disk import (  # noqa: E402
     _build_banner_icon_helper,
     _build_banner_text_helper,
     _vtoc_bitmap_offset,
+    EXPECTED_ORIGINAL,
     patch_banner_draw4_payload,
 )
 
 
 class RuntimeDiskR29Tests(unittest.TestCase):
+    def test_expected_overlay_load_address_is_optional(self):
+        self.assertIn("load", EXPECTED_ORIGINAL["PRCOMS"])
+        self.assertNotIn("load", EXPECTED_ORIGINAL["MENUS7"])
+
     def test_dos33_vtoc_sector_bit_order(self):
         base = (17 * 16 * 256) + 0x38
 
