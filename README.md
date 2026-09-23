@@ -74,6 +74,29 @@ band reduction as the greeting-card sheet.
 R23 remains native-only.  `SETLF5` stays disabled and no `ESC % 9 n`
 fine-spacing commands are used.
 
+Validated R23 overlays:
+
+```text
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+GCDRAW.OKI -> runtime DRAW1
+length 2810
+SHA256 00fb0aed8c2a80b145e3316e67b8db1727948808a07dd58ce42999e1729801b0
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+```
+
+Validated R23 runtime image:
+
+```text
+size   143360 bytes
+SHA256 e937060c3c945a679a65f6e080fee14ea7099937fc2ac5660061b2a9c2ace287
+```
+
 ## R22 sign height: superseded five-band experiment
 
 R21 is retained unchanged for greeting cards.  The sign path was still using
