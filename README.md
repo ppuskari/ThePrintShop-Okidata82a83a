@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 greeting-card geometry is frozen; R23 sign-height trim matches the card-page reduction and is ready for hardware testing.**
+**R21 greeting-card geometry is frozen; R24 restores one lower sign band after the R23 hardware test and is ready for validation.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -34,7 +34,58 @@ The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
 
-## R23 sign height: match the greeting-card page reduction
+## R24 sign height: restore one lower duplicate band
+
+R23 proved that the eight-band reduction was almost exactly the right physical
+height, but hardware testing showed the final lower border band was visually
+too aggressive: the inner line printed while the outer line was effectively
+lost.  One additional native seven-pin graphics band should complete that
+bottom border and still retain the excellent vertical fit.
+
+R24 therefore changes only the sign duplicate-removal cadence.  It removes
+**seven** redundant duplicate OkiGraph bands over the full sign instead of
+eight:
+
+```text
+R23 reduction: 8 x 15/144 inch = 21.167 mm
+R24 reduction: 7 x 15/144 inch = 18.521 mm
+difference:                         +2.646 mm height restored
+```
+
+The first 196-line sign half still omits four duplicate bands.  The second
+196-line half omits only three.  The omitted copies remain distributed through
+the raster, and the final portion of the second half is no longer one of the
+skip locations.  This preserves complete source coverage and restores one
+native output band near the lower end rather than changing the top margin.
+
+Greeting-card SIDE=0/1 geometry remains byte-for-byte on the frozen R21 path.
+`SETLF5` remains disabled; R24 uses only the proven native OkiGraph
+`$03 $0E` vertical feed.
+
+Validated R24 overlays:
+
+```text
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+GCDRAW.OKI -> runtime DRAW1
+length 2812
+SHA256 9f74176a45823ee9544ce3a7aae2970e90252786f706960e309af481ace4524d
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+```
+
+Validated R24 runtime image:
+
+```text
+size   143360 bytes
+SHA256 98e23b7191047fe7d427f645e5847e57ca738974723cbe9d0b647b655168cd04
+```
+
+## R23 sign height: superseded eight-band experiment
 
 R22 used a smaller five-band sign reduction.  R23 supersedes that experiment
 and applies the same total physical vertical reduction that made the R21
