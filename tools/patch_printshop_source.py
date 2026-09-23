@@ -218,17 +218,6 @@ MENUS_INIT_NEW = """ JSR GSELECT
  STA $B9
  LDA RETFLAG"""
 
-MENUS_R25_HELPER = """R25TOP LDA $95F5
- CMP #02
- BNE R25TOPX
- LDX #00
- LDY #00
- JSR $1806
- INY
- JMP $1803
-R25TOPX RTS"""
-
-
 
 GCDRAW_START_OLD = """ LDA A2
  STA $60D1
@@ -238,7 +227,6 @@ GCDRAW_START_OLD = """ LDA A2
 
 GCDRAW_START_NEW = """ LDA A2
  STA $60D1
- JSR $6ECA
  LDX #00
  STX RETFLAG"""
 
@@ -265,7 +253,9 @@ GCDRAW_DUMP_NEW = """DUMP2 STX BADDR
  DEX
  BNE ROW
  INC CREDBUF-1
- BNE ROW0
+ LDX SIDE
+ DEX
+ BEQ ROW0
 ROW LDX #00
  LDY #01
  JSR CRLF
@@ -579,17 +569,12 @@ def patch_menus(text: str) -> str:
     if len(OLD_MENU) != len(NEW_MENU):
         raise AssertionError("menu replacement must remain length-preserving")
     patched = replace_once(text, OLD_MENU, NEW_MENU, "MENUS7.S printer label")
-    patched = replace_once(
+    return replace_once(
         patched,
         MENUS_INIT_OLD,
         MENUS_INIT_NEW,
         "MENUS7.S type-5 state initialization",
     )
-    ends = list(re.finditer(r"(?m)^[ \t]*END\b.*$", patched))
-    if not ends:
-        raise RuntimeError("MENUS7.S: END directive not found")
-    m = ends[-1]
-    return patched[:m.start()] + MENUS_R25_HELPER + "\n" + patched[m.start():]
 
 
 def load_image(path: pathlib.Path | None, disk_index: int) -> bytes:
@@ -756,8 +741,8 @@ def main() -> int:
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
     print("  R25 base: R24 seven-band sign trim; R21 card geometry unchanged")
-    print("  R25 sign top: one native 15/144-inch OkiGraph feed before rendering")
-    print("  R25 sign height: unchanged from R24 at seven omitted duplicate bands")
+    print("  R25 sign top: first sign raster takes one native 15/144-inch feed")
+    print("  R25 implementation is local to DRAW1; no cross-overlay calls")
     print("  R25 expected margins from 8/12 mm: about 10.65/9.35 mm")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
