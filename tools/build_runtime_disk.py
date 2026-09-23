@@ -71,6 +71,11 @@ EXPECTED_ORIGINAL = {
         "length": 2737,
         "sha256": "cfa548eb4f950156c14639372f2681edbaa810e86f0945d73c24e0304e436353",
     },
+    "DRAW3": {
+        "load": 0x7800,
+        "length": 1791,
+        "sha256": "16d6264b3a6f815f4138677967b235b37582713ec5bcc2c23f39cbeb3082282f",
+    },
 }
 
 def sha256(data: bytes) -> str:
@@ -229,6 +234,12 @@ def main() -> int:
         required=True,
         help="compiled GCDRAW.OKI payload; installed as runtime DRAW1",
     )
+    ap.add_argument(
+        "--lhdraw",
+        type=pathlib.Path,
+        required=True,
+        help="compiled LHDRAW.OKI payload; installed as runtime DRAW3",
+    )
     ap.add_argument("--output", type=pathlib.Path, required=True)
     args = ap.parse_args()
 
@@ -239,7 +250,7 @@ def main() -> int:
         )
 
     entries = {e["name"].upper(): e for e in catalog(img)}
-    for required in ("PRCOMS", "MENUS7", "DRAW1", "SYSLIB"):
+    for required in ("PRCOMS", "MENUS7", "DRAW1", "DRAW3", "SYSLIB"):
         if required not in entries:
             raise RuntimeError(f"base disk is missing required file {required}")
 
@@ -249,6 +260,7 @@ def main() -> int:
     prcoms = args.prcoms.read_bytes()
     menus7 = args.menus7.read_bytes()
     gcdraw = args.gcdraw.read_bytes()
+    lhdraw = args.lhdraw.read_bytes()
 
     print(
         f"  input PRCOMS len={len(prcoms)} sha256={sha256(prcoms)}"
@@ -259,11 +271,15 @@ def main() -> int:
     print(
         f"  input GCDRAW/DRAW1 len={len(gcdraw)} sha256={sha256(gcdraw)}"
     )
+    print(
+        f"  input LHDRAW/DRAW3 len={len(lhdraw)} sha256={sha256(lhdraw)}"
+    )
 
     print("Rewriting executable overlays in place...")
     img = rewrite_dos_binary(img, "PRCOMS", prcoms)
     img = rewrite_dos_binary(img, "MENUS7", menus7)
     img = rewrite_dos_binary(img, "DRAW1", gcdraw)
+    img = rewrite_dos_binary(img, "DRAW3", lhdraw)
 
     print("Patching TEST PAPER POSITION to return carriage without line feed...")
     img = patch_test_paper_cr_only(img)
@@ -271,7 +287,12 @@ def main() -> int:
     print("Reading patched overlays back through DOS T/S chains...")
     verify_patched(
         img,
-        {"PRCOMS": prcoms, "MENUS7": menus7, "DRAW1": gcdraw},
+        {
+            "PRCOMS": prcoms,
+            "MENUS7": menus7,
+            "DRAW1": gcdraw,
+            "DRAW3": lhdraw,
+        },
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
