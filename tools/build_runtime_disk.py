@@ -66,6 +66,12 @@ EXPECTED_ORIGINAL = {
 }
 
 
+BANNER_TEXT_CALL = bytes.fromhex("A2 00 A0 01 20 03 18")
+BANNER_ICON_CALL = bytes.fromhex(
+    "A9 01 A8 25 54 09 06 AA 20 03 18"
+)
+
+
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -327,6 +333,210 @@ def rewrite_dos_binary(
     return bytes(out)
 
 
+class _HelperBuilder:
+    def __init__(self, base: int):
+        self.base = base
+        self.code = bytearray()
+        self.labels: dict[str, int] = {}
+        self.rel8: list[tuple[int, str]] = []
+        self.abs16: list[tuple[int, str]] = []
+
+    def emit(self, *values: int) -> None:
+        self.code.extend(values)
+
+    def label(self, name: str) -> None:
+        if name in self.labels:
+            raise RuntimeError(f"duplicate helper label {name}")
+        self.labels[name] = len(self.code)
+
+    def branch(self, opcode: int, label: str) -> None:
+        self.emit(opcode, 0)
+        self.rel8.append((len(self.code) - 1, label))
+
+    def abs_label(self, opcode: int, label: str) -> None:
+        self.emit(opcode, 0, 0)
+        self.abs16.append((len(self.code) - 2, label))
+
+    def finish(self) -> bytes:
+        for operand_index, label in self.rel8:
+            if label not in self.labels:
+                raise RuntimeError(f"unknown helper label {label}")
+            target = self.base + self.labels[label]
+            next_pc = self.base + operand_index + 1
+            delta = target - next_pc
+            if not -128 <= delta <= 127:
+                raise RuntimeError(f"branch to {label} is out of range")
+            self.code[operand_index] = delta & 0xFF
+
+        for operand_index, label in self.abs16:
+            if label not in self.labels:
+                raise RuntimeError(f"unknown helper label {label}")
+            target = self.base + self.labels[label]
+            self.code[operand_index] = target & 0xFF
+            self.code[operand_index + 1] = (target >> 8) & 0xFF
+
+        return bytes(self.code)
+
+
+def _build_banner_text_helper(base: int) -> bytes:
+    """Build type-5 banner-text 1,1,2 native-feed helper."""
+    a = _HelperBuilder(base)
+
+    # Call site already loaded X=0,Y=1. Non-type-5 printers simply tail-call
+    # the original CRLF. Type 5 changes only Y according to a 1,1,2 cadence.
+    a.emit(0xAD, 0xF1, 0x95)       # LDA $95F1 (PRTYPE)
+    a.emit(0xC9, 0x05)             # CMP #5
+    a.branch(0xD0, "pass")          # BNE pass
+    a.abs_label(0xEE, "phase")      # INC phase
+    a.abs_label(0xAD, "phase")      # LDA phase
+    a.emit(0xC9, 0x03)             # CMP #3
+    a.branch(0x90, "one")           # BCC one
+    a.emit(0xA9, 0x00)             # LDA #0
+    a.abs_label(0x8D, "phase")      # STA phase
+    a.emit(0xA0, 0x02)             # LDY #2
+    a.branch(0xD0, "pass")          # BNE pass (always)
+    a.label("one")
+    a.emit(0xA0, 0x01)             # LDY #1
+    a.label("pass")
+    a.emit(0x4C, 0x03, 0x18)       # JMP CRLF
+    a.label("phase")
+    a.emit(0x00)
+
+    return a.finish()
+
+
+def _build_banner_icon_helper(base: int) -> bytes:
+    """Build type-5 15->13 banner-icon positioning helper."""
+    a = _HelperBuilder(base)
+
+    # Original BICON2 code has already computed X=6/7,Y=1 before calling us.
+    # Preserve that for every non-type-5 printer.
+    a.emit(0xAD, 0xF1, 0x95)       # LDA $95F1 (PRTYPE)
+    a.emit(0xC9, 0x05)             # CMP #5
+    a.branch(0xD0, "pass")          # BNE pass
+
+    a.emit(0xA5, 0x54)             # LDA XCUR
+    a.label("mod")
+    a.emit(0xC9, 0x0F)             # CMP #15
+    a.branch(0x90, "remainder")     # BCC remainder
+    a.emit(0xE9, 0x0F)             # SBC #15 (CMP left C set)
+    a.branch(0xB0, "mod")           # BCS mod
+
+    a.label("remainder")
+    a.emit(0xC9, 0x00)             # CMP #0
+    a.branch(0xF0, "merge")         # BEQ merge
+    a.emit(0xC9, 0x08)             # CMP #8
+    a.branch(0xF0, "merge")         # BEQ merge
+
+    a.emit(0xA2, 0x00)             # LDX #0: native feed
+    a.emit(0xA0, 0x01)             # LDY #1
+    a.emit(0x4C, 0x03, 0x18)       # JMP CRLF
+
+    a.label("merge")
+    a.emit(0xA2, 0x02)             # LDX #2: zero-feed overstrike
+    a.emit(0xA0, 0x01)             # LDY #1
+    a.emit(0x4C, 0x03, 0x18)       # JMP CRLF
+
+    a.label("pass")
+    a.emit(0x4C, 0x03, 0x18)       # JMP original CRLF
+
+    return a.finish()
+
+
+def patch_banner_draw4_payload(
+    payload: bytes,
+    load: int = 0x7800,
+) -> tuple[bytes, dict[str, int]]:
+    """Patch the exact shipped DRAW4 and append banner-only helpers."""
+    text_hits = [
+        i for i in range(len(payload))
+        if payload.startswith(BANNER_TEXT_CALL, i)
+    ]
+    icon_hits = [
+        i for i in range(len(payload))
+        if payload.startswith(BANNER_ICON_CALL, i)
+    ]
+
+    if len(text_hits) != 1:
+        raise RuntimeError(
+            f"DRAW4: expected one banner-text CRLF site, found {len(text_hits)}"
+        )
+    if len(icon_hits) != 1:
+        raise RuntimeError(
+            f"DRAW4: expected one banner-icon CRLF site, found {len(icon_hits)}"
+        )
+
+    text_addr = load + len(payload)
+    text_helper = _build_banner_text_helper(text_addr)
+    icon_addr = text_addr + len(text_helper)
+    icon_helper = _build_banner_icon_helper(icon_addr)
+
+    patched = bytearray(payload)
+
+    text_jsr = text_hits[0] + 4
+    if patched[text_jsr] != 0x20:
+        raise RuntimeError("DRAW4: banner-text site lost JSR opcode")
+    patched[text_jsr + 1] = text_addr & 0xFF
+    patched[text_jsr + 2] = (text_addr >> 8) & 0xFF
+
+    icon_jsr = icon_hits[0] + 8
+    if patched[icon_jsr] != 0x20:
+        raise RuntimeError("DRAW4: banner-icon site lost JSR opcode")
+    patched[icon_jsr + 1] = icon_addr & 0xFF
+    patched[icon_jsr + 2] = (icon_addr >> 8) & 0xFF
+
+    patched += text_helper
+    patched += icon_helper
+
+    return bytes(patched), {
+        "text_site": text_hits[0],
+        "icon_site": icon_hits[0],
+        "text_helper": text_addr,
+        "icon_helper": icon_addr,
+    }
+
+
+def patch_banner_draw4(img: bytes) -> tuple[bytes, bytes]:
+    load, payload = read_dos_binary(img, "DRAW4")
+    expect = EXPECTED_ORIGINAL["DRAW4"]
+    if load != expect["load"]:
+        raise RuntimeError("DRAW4: unexpected load address")
+    if len(payload) != expect["length"] or sha256(payload) != expect["sha256"]:
+        raise RuntimeError("DRAW4: runtime base does not match known 1012-byte image")
+
+    patched_payload, info = patch_banner_draw4_payload(payload, load)
+    end = load + len(patched_payload)
+    if end > DRAW_OVERLAY_LIMIT:
+        raise RuntimeError(
+            f"R29 DRAW4 would end at 0x{end:04X}, beyond "
+            f"0x{DRAW_OVERLAY_LIMIT:04X}"
+        )
+
+    out = rewrite_dos_binary(
+        img,
+        "DRAW4",
+        patched_payload,
+        allow_expand=True,
+    )
+    check_load, check_payload = read_dos_binary(out, "DRAW4")
+    if check_load != load or check_payload != patched_payload:
+        raise RuntimeError("DRAW4: R29 runtime patch read-back failed")
+
+    print(
+        "  patched runtime DRAW4 directly: PASS "
+        f"text site +0x{info['text_site']:04X} -> "
+        f"0x{info['text_helper']:04X}; "
+        f"icon site +0x{info['icon_site']:04X} -> "
+        f"0x{info['icon_helper']:04X}"
+    )
+    print(
+        f"  R29 DRAW4 len={len(patched_payload)} "
+        f"RAM=0x{load:04X}-0x{end - 1:04X} "
+        f"sha256={sha256(patched_payload)}"
+    )
+    return out, patched_payload
+
+
 def patch_test_paper_cr_only(img: bytes) -> tuple[bytes, bytes]:
     load, payload = read_dos_binary(img, "SYSLIB")
     if load != TEST_PAPER_LOAD:
@@ -395,12 +605,6 @@ def main() -> int:
         required=True,
         help="compiled GCDRAW.OKI payload; installed as DRAW1",
     )
-    ap.add_argument(
-        "--bdraw",
-        type=pathlib.Path,
-        required=True,
-        help="compiled R29 BDRAW.OKI payload; installed as DRAW4",
-    )
     ap.add_argument("--output", type=pathlib.Path, required=True)
     args = ap.parse_args()
 
@@ -421,34 +625,18 @@ def main() -> int:
     prcoms = args.prcoms.read_bytes()
     menus7 = args.menus7.read_bytes()
     gcdraw = args.gcdraw.read_bytes()
-    bdraw = args.bdraw.read_bytes()
 
     print(f"  input PRCOMS len={len(prcoms)} sha256={sha256(prcoms)}")
     print(f"  input MENUS7 len={len(menus7)} sha256={sha256(menus7)}")
     print(f"  input GCDRAW/DRAW1 len={len(gcdraw)} sha256={sha256(gcdraw)}")
-    print(f"  input BDRAW/DRAW4 len={len(bdraw)} sha256={sha256(bdraw)}")
-
-    draw4_load = EXPECTED_ORIGINAL["DRAW4"]["load"]
-    draw4_end = draw4_load + len(bdraw)
-    if draw4_end > DRAW_OVERLAY_LIMIT:
-        raise RuntimeError(
-            f"R29 DRAW4 would end at 0x{draw4_end:04X}, beyond "
-            f"the 0x{DRAW_OVERLAY_LIMIT:04X} overlay boundary"
-        )
-    print(
-        f"  R29 DRAW4 RAM range: 0x{draw4_load:04X}-"
-        f"0x{draw4_end - 1:04X}; below 0x{DRAW_OVERLAY_LIMIT:04X}: PASS"
-    )
 
     print("Rewriting R27 executable overlays...")
     img = rewrite_dos_binary(img, "PRCOMS", prcoms)
     img = rewrite_dos_binary(img, "MENUS7", menus7)
     img = rewrite_dos_binary(img, "DRAW1", gcdraw)
 
-    print("Installing R29 banner-only DRAW4 overlay...")
-    img = rewrite_dos_binary(
-        img, "DRAW4", bdraw, allow_expand=True
-    )
+    print("Patching exact shipped DRAW4 runtime for R29 banner geometry...")
+    img, draw4 = patch_banner_draw4(img)
 
     print("Applying R14 paper-position patch without growing SYSLIB...")
     img, syslib = patch_test_paper_cr_only(img)
@@ -460,7 +648,7 @@ def main() -> int:
             "PRCOMS": prcoms,
             "MENUS7": menus7,
             "DRAW1": gcdraw,
-            "DRAW4": bdraw,
+            "DRAW4": draw4,
             "SYSLIB": syslib,
         },
     )
