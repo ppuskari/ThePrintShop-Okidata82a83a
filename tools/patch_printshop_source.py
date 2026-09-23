@@ -110,7 +110,11 @@ CRLF2 LDA #$0A
 *
 CRLF5 LDA FIX80
  BEQ CRLF5T
- CPX #00
+ CPX #40
+ BNE CRLF5N
+ LDY #68
+ BNE CRLF5G
+CRLF5N CPX #00
  BNE CRLF5E
  CPY #00
  BEQ CRLF5E
@@ -121,14 +125,12 @@ CRLF5G LDA #03
  DEY
  BNE CRLF5G
  JMP CRLFX
-CRLF5E LDA #03
- JSR COUTRAW
- LDA #02
- JSR COUTRAW
- DEC FIX80
+CRLF5E LDA #$0D
+ JSR COUT1
+ JMP CRLF5D
 CRLF5T LDA #$0D
  JSR COUTRAW
- DEY
+CRLF5D DEY
  BMI CRLFX
  CPX #02
  BEQ CRLFX
@@ -398,64 +400,6 @@ LF36B JMP CRLF
 R22LFX DFB 2,0,2"""
 
 
-LHDRAW_MOVE_OLD = """MOVIT LDA SIDE
- BEQ MOV7
-*
-MOV575 LDX #40
- LDY #14
- JSR MOVCRLF
- LDX #08
- LDY #01
- JSR MOVCRLF
-*
-MOV7 LDX #07
- LDY #01
-MOVCRLF LDA PREVIEW
- BNE MOVX
- JMP CRLF
-MOVX RTS"""
-
-LHDRAW_MOVE_NEW = """MOVIT LDA SIDE
- BEQ MOV7
-*
-MOV575 LDA PREVIEW
- BNE R27OLD
- LDA $95F1
- CMP #05
- BNE R27OLD
- LDX #00
- LDY #00
- JSR SENDGC
- LDX #00
- LDY #46
- JSR CRLF
- LDX #02
- LDY #00
- JSR CRLF
-R27OLD LDX #40
- LDY #14
- JSR MOVCRLF
- LDX #08
- LDY #01
- JSR MOVCRLF
-*
-MOV7 LDX #07
- LDY #01
-MOVCRLF LDA PREVIEW
- BNE MOVX
- JMP CRLF
-MOVX RTS"""
-
-
-def patch_lhdraw(text: str) -> str:
-    return replace_once(
-        text,
-        LHDRAW_MOVE_OLD,
-        LHDRAW_MOVE_NEW,
-        "LHDRAW.S R27 stationery native page-gap correction",
-    )
-
-
 
 def patch_gcdraw(text: str) -> str:
     patched = replace_once(
@@ -722,13 +666,11 @@ def write_patched_disks(
     disk3: bytes,
     patched_prcoms: str,
     patched_menus7: str,
-    patched_lhdraw: str,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     out1 = rewrite_binary_file(disk1, "PRCOMS.S", patched_prcoms)
     out2 = rewrite_binary_file(disk2, "MENUS7.S", patched_menus7)
-    out3 = rewrite_binary_file(disk3, "LHDRAW.S", patched_lhdraw)
 
     p1 = output_dir / "PrintShop-V2-OkiGraph-source-1.dsk"
     p2 = output_dir / "PrintShop-V2-OkiGraph-source-2.dsk"
@@ -736,12 +678,11 @@ def write_patched_disks(
 
     p1.write_bytes(out1)
     p2.write_bytes(out2)
-    p3.write_bytes(out3)
+    p3.write_bytes(disk3)
 
     # Final content assertions against the generated disk images.
     rt1 = binary_source_text(out1, "PRCOMS.S")
     rt2 = binary_source_text(out2, "MENUS7.S")
-    rt3 = binary_source_text(out3, "LHDRAW.S")
     if (
         " ORA #$80\n" not in rt1
         or GC5_OLD.search(rt1)
@@ -757,15 +698,10 @@ def write_patched_disks(
             "generated source disk 2 does not contain the OkiGraph menu/init patch"
         )
 
-    if "LDY #46\n JSR CRLF\n" not in rt3:
-        raise RuntimeError(
-            "generated source disk 3 does not contain the R27 LHDRAW patch"
-        )
-
     print("  generated DOS 3.3 source disks:")
     print(f"    {p1}")
     print(f"    {p2}")
-    print(f"    {p3}")
+    print(f"    {p3} (unchanged source disk 3)")
 
 
 def main() -> int:
@@ -786,21 +722,17 @@ def main() -> int:
 
     disk1 = load_image(args.disk1, 0)
     disk2 = load_image(args.disk2, 1)
-    disk3 = load_image(args.disk3, 2)
 
     prcoms_info = binary_source_info(disk1, "PRCOMS.S")
     menus7_info = binary_source_info(disk2, "MENUS7.S")
     gcdraw_info = binary_source_info(disk2, "GCDRAW.S")
-    lhdraw_info = binary_source_info(disk3, "LHDRAW.S")
     prcoms = prcoms_info["text"]
     menus7 = menus7_info["text"]
     gcdraw = gcdraw_info["text"]
-    lhdraw = lhdraw_info["text"]
 
     patched_prcoms = patch_prcoms(prcoms)
     patched_menus7 = patch_menus(menus7)
     patched_gcdraw = patch_gcdraw(gcdraw)
-    patched_lhdraw = patch_lhdraw(lhdraw)
 
     # These are the two invariants that keep the first hardware build
     # deliberately low-risk.
@@ -810,9 +742,9 @@ def main() -> int:
     print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
     print("  menu label: 23 -> 23 characters")
     print("  R27 base: golden R21 cards + golden R26 signs unchanged")
-    print("  R27 stationery: add 46 native OkiGraph feeds to MOV575")
-    print("  R27 correction: 46 x 15/144 inch = 121.708 mm")
-    print("  historical MOV575 remains after the additive native correction")
+    print("  R27 stationery: type-5 X=40/Y=14 becomes 68 native graphics feeds")
+    print("  R27 native move: 68 x 15/144 inch = 179.917 mm")
+    print("  R27 preserves following X=8 and X=7 text-feed calls")
     print("  graphics data: R11 original Oki type-5 $03 escape semantics")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
@@ -823,8 +755,6 @@ def main() -> int:
     print(f"  MENUS7 decoded SHA256 after : {sha256_text(patched_menus7)}")
     print(f"  GCDRAW decoded SHA256 before: {sha256_text(gcdraw)}")
     print(f"  GCDRAW decoded SHA256 after : {sha256_text(patched_gcdraw)}")
-    print(f"  LHDRAW decoded SHA256 before: {sha256_text(lhdraw)}")
-    print(f"  LHDRAW decoded SHA256 after : {sha256_text(patched_lhdraw)}")
 
     if args.output_dir:
         args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -837,12 +767,10 @@ def main() -> int:
         (args.output_dir / "GCDRAW.OKI.S").write_text(
             patched_gcdraw, encoding="ascii", newline="\n"
         )
-        (args.output_dir / "LHDRAW.OKI.S").write_text(
-            patched_lhdraw, encoding="ascii", newline="\n"
-        )
         print(f"  wrote decoded patched source to: {args.output_dir}")
 
     if args.output_disks:
+        disk3 = load_image(args.disk3, 2)
         write_patched_disks(
             args.output_disks,
             disk1,
@@ -850,7 +778,6 @@ def main() -> int:
             disk3,
             patched_prcoms,
             patched_menus7,
-            patched_lhdraw,
         )
 
     if not args.check and not args.output_dir and not args.output_disks:
