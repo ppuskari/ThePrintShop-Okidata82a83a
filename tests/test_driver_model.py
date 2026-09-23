@@ -59,6 +59,30 @@ class DriverModelTests(unittest.TestCase):
         self.assertFalse(state)
         self.assertNotIn(0x0A, stream)
 
+    def test_r27_stationery_mov575_uses_native_feeds(self):
+        stream1, state = crlf_type5(
+            in_graphics=True, x_72=40, y_count=14
+        )
+        self.assertTrue(state)
+        self.assertEqual(stream1, b"\x03\x0e" * 68)
+
+        stream2, state = crlf_type5(
+            in_graphics=state, x_72=8, y_count=1
+        )
+        self.assertFalse(state)
+        self.assertEqual(stream2, b"\x03\x02\x0d\x0a")
+
+        stream3, state = crlf_type5(
+            in_graphics=state, x_72=7, y_count=1
+        )
+        self.assertFalse(state)
+        self.assertEqual(stream3, b"\x0d\x0a")
+
+        whole = stream1 + stream2 + stream3
+        self.assertEqual(whole.count(b"\x0e"), 68)
+        self.assertEqual(whole.count(b"\x0a"), 2)
+        self.assertNotIn(b"%9", whole)
+
     def test_first_outside_piece_has_no_vertical_feed(self):
         stream, state = gcdraw_piece_start(
             in_graphics=False,
@@ -84,6 +108,7 @@ class DriverModelTests(unittest.TestCase):
             crlf_type5(in_graphics=False, x_72=7, y_count=0)[0],
             crlf_type5(in_graphics=True, x_72=0, y_count=1)[0],
             crlf_type5(in_graphics=True, x_72=12, y_count=1)[0],
+            crlf_type5(in_graphics=True, x_72=40, y_count=14)[0],
             crlf_type5(in_graphics=True, x_72=2, y_count=1)[0],
             gcdraw_piece_start(
                 in_graphics=False, first_outside_piece=True
