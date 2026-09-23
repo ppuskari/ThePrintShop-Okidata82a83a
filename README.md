@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 greeting cards and R26 signs are hardware-golden; R27 repairs the stationery full-page advance with native OkiGraph spacing.**
+**R21 greeting cards, R26 signs, and R27 stationery are hardware-golden; R29 isolates banner text/icon geometry fixes inside DRAW4.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,50 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R29 banner: DRAW4-contained geometry correction
+
+R29 rebases from the hardware-good R27 runtime after the rejected R28
+experiment demonstrated that extending resident SYSLIB beyond its historical
+4773-byte image was unsafe. R29 does **not** grow SYSLIB and does not change
+the R27 PRCOMS, MENUS7, or DRAW1 paths used by cards, signs, and stationery.
+
+The historical banner overlay is BDRAW.S / runtime DRAW4 at $7800. R29 patches
+that source directly and assembles a new DRAW4 overlay.
+
+For type-5 OkiGraph banner text, the historical target is 20/144 inch per
+source-slice interval. R29 uses only the already-proven native 15/144-inch
+OkiGraph feed and a repeating 1,1,2-feed cadence:
+
+```text
+15/144 + 15/144 + 30/144 = 60/144
+3 x historical 20/144     = 60/144
+```
+
+Thus every three text intervals have the exact historical total without
+reintroducing ESC % 9 n.
+
+For the banner icon, the historical X=6/7 sequence averages 13/144 inch per
+source slice. R29 maps fifteen source slices to thirteen physical native-feed
+positions by merging two evenly distributed adjacent slices at zero feed.
+Across the full 88-slice icon this produces 76 native feeds:
+
+```text
+76 x 15/144 = 1140/144 inch
+historical 88 x 13/144 = 1144/144 inch
+error = -4/144 inch = -0.706 mm
+```
+
+All source slices are still emitted; the selected adjacent slices overstrike
+rather than being discarded.
+
+Non-type-5 printers retain the original BDRAW CRLF parameters.
+
+The patched DRAW4 is allowed to grow beyond its historical four data sectors.
+The runtime builder allocates only the additional DOS data sector(s) required
+by DRAW4, updates its T/S list, VTOC allocation bitmap, and catalog sector
+count, and verifies that the loaded overlay remains entirely below $8300.
+Resident SYSLIB remains exactly 4773 bytes.
 
 ## R27 stationery: restore the collapsed full-page advance
 
