@@ -81,7 +81,9 @@ try {
             "MENUS7.ORIG.BUILD.S",
             "MENUS7.OKI.BUILD.S",
             "GCDRAW.ORIG.BUILD.S",
-            "GCDRAW.OKI.BUILD.S"
+            "GCDRAW.OKI.BUILD.S",
+            "BDRAW.ORIG.BUILD.S",
+            "BDRAW.OKI.BUILD.S"
         )) {
             Write-Host "  $Source"
             & $MerlinExe $Source
