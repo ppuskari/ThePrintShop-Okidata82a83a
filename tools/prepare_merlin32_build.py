@@ -54,7 +54,6 @@ def main() -> int:
     prcoms_orig = binary_source_text(d1, "PRCOMS.S")
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
-    bdraw_orig = binary_source_text(d2, "BDRAW.S")
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
     gcdraw_oki = patch_gcdraw(gcdraw_orig)
@@ -66,7 +65,6 @@ def main() -> int:
         "MENUS7.OKI.BUILD.S": add_sav(menus7_oki, "MENUS7.OKI"),
         "GCDRAW.ORIG.BUILD.S": add_sav(gcdraw_orig, "GCDRAW.ORIG"),
         "GCDRAW.OKI.BUILD.S": add_sav(gcdraw_oki, "GCDRAW.OKI"),
-        "BDRAW.ORIG.BUILD.S": add_sav(bdraw_orig, "BDRAW.ORIG"),
     }
 
     for name, text in products.items():
