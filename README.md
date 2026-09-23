@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R20 native-only top/fold experiment: CI-validated; hardware validation is next.**
+**R21 double-native-fold experiment: CI-validated; hardware validation is next.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,58 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R21 double-native fold
+
+R20 hardware measurements put the first border at about 6.0 mm from the top
+perforation and the final border at about 9.0 mm from the next perforation.
+The central complete-panel gap was also about 9 mm.
+
+R21 leaves the R20 top position completely unchanged and adds one additional
+native OkiGraph graphics feed at the true fold between the two complete card
+panels:
+
+```text
+R20 fold:  1 x 15/144 inch = 2.646 mm
+R21 fold:  2 x 15/144 inch = 5.292 mm
+difference                  = +2.646 mm
+```
+
+That shifts only the second complete panel downward by 2.646 mm.  If the R20
+9.0 mm bottom measurement repeats, the predicted R21 bottom margin is:
+
+```text
+9.0 - 2.646 = 6.354 mm
+```
+
+which closely matches the measured ~6.0 mm top margin.
+
+R21 remains native-only: `SETLF5` is still disabled and no `ESC % 9 n`
+fine-spacing commands are emitted.  Half-panel joins, raster spacing, and the
+R14 TEST PAPER POSITION CR-only patch are unchanged.
+
+Validated R21 overlays:
+
+```text
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+GCDRAW.OKI -> runtime DRAW1
+length 2808
+SHA256 dff91a6893a862160e9f2e0452f3c4941e3a2110caea055240de135c1ff99b5f
+
+MENUS7.OKI
+length 3018
+SHA256 1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485
+```
+
+Validated R21 runtime image:
+
+```text
+size   143360 bytes
+SHA256 42042644cfe7071e11f6cd8acde45bc51526d4ddeca6e90a3d25c4b2925b27b4
+```
 
 ## R20 native-only top and fold adjustment
 
