@@ -493,7 +493,10 @@ def replace_bdraw_icon_hook(text: str) -> str:
             "nearby JSR CRLF terminator"
         )
 
-    block = "\n".join(lines[start:end + 1]).upper()
+    block = "\n".join(
+        " ".join(line.strip().split()).upper()
+        for line in lines[start:end + 1]
+    )
     required = ("LDA", "TAY", "XCUR", "ORA", "TAX", "JSR CRLF")
     missing = [token for token in required if token not in block]
     if missing:
