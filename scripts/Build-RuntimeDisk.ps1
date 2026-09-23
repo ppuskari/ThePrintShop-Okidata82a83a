@@ -66,6 +66,12 @@ Write-Host ""
 
 Push-Location $RepoRoot
 try {
+    Write-Host "Running R29 regression tests..."
+    Invoke-Checked {
+        py -3 -m unittest discover -s tests -v
+    } "Regression tests"
+
+    Write-Host ""
     Write-Host "Preparing original-control and OkiGraph assembly sources..."
     Invoke-Checked {
         py -3 tools\prepare_merlin32_build.py --output-dir $OutPath
