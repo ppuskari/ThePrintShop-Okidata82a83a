@@ -6,6 +6,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from driver_model import (  # noqa: E402
+    banner_icon_x,
+    banner_text_native_feeds,
     crlf_type5,
     encode_columns,
     encode_pair,
@@ -58,6 +60,28 @@ class DriverModelTests(unittest.TestCase):
         self.assertEqual(stream, b"\x03\x02\x0d")
         self.assertFalse(state)
         self.assertNotIn(0x0A, stream)
+
+    def test_r29_banner_text_three_to_four_native_feed_ratio(self):
+        feeds = [banner_text_native_feeds(i) for i in range(12)]
+        self.assertEqual(feeds[:6], [1, 1, 2, 1, 1, 2])
+        self.assertEqual(sum(feeds), 16)
+        self.assertEqual(sum(feeds) * 15, 12 * 20)
+
+    def test_r29_banner_icon_15_to_13_merge_ratio(self):
+        xs = [banner_icon_x(i) for i in range(88)]
+        merges = [i for i, x in enumerate(xs) if x == 2]
+        self.assertEqual(
+            merges,
+            [0, 8, 15, 23, 30, 38, 45, 53, 60, 68, 75, 83],
+        )
+        self.assertEqual(xs.count(0), 76)
+        self.assertEqual(xs.count(2), 12)
+
+        # 76 proven native 15/144 feeds across the 88-slice icon.
+        # Historical alternating 12/14 target totals 1144/144;
+        # R29 totals 1140/144, only 4/144 inch (0.706 mm) short.
+        self.assertEqual(xs.count(0) * 15, 1140)
+        self.assertEqual(88 * 13, 1144)
 
     def test_r27_stationery_mov575_uses_native_feeds(self):
         stream1, state = crlf_type5(
