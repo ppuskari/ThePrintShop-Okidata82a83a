@@ -106,6 +106,7 @@ try {
     $Prcoms = Join-Path $OutPath "PRCOMS.OKI"
     $Menus7 = Join-Path $OutPath "MENUS7.OKI"
     $Gcdraw = Join-Path $OutPath "GCDRAW.OKI"
+    $Lhdraw = Join-Path $OutPath "LHDRAW.OKI"
 
     Write-Host ""
     Write-Host "Constructing runnable Print Shop DOS disk..."
@@ -114,6 +115,7 @@ try {
         "--prcoms", $Prcoms,
         "--menus7", $Menus7,
         "--gcdraw", $Gcdraw,
+        "--lhdraw", $Lhdraw,
         "--output", $Runtime
     )
     if ($BaseDisk) {
