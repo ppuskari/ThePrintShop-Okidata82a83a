@@ -56,16 +56,18 @@ def main() -> int:
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
     from inspect_printshop_source import catalog, file_sectors, textish
-    entries = list(catalog(d2))
-    print("=== DISK 2 CATALOG ===")
-    for e in entries:
-        print(e["name"])
-    for e in entries:
-        if e["name"].upper().startswith("DRAW3"):
-            print("=== DRAW3 SOURCE ===")
-            txt = textish(file_sectors(d2, e))
-            for j, line in enumerate(txt.splitlines()):
-                print(f"{j + 1:04d}: {line}")
+    d3 = load_image(None, 2)
+    for diskno, img in ((1, d1), (2, d2), (3, d3)):
+        entries = list(catalog(img))
+        print(f"=== DISK {diskno} CATALOG ===")
+        for e in entries:
+            print(e["name"])
+        for e in entries:
+            if "DRAW3" in e["name"].upper():
+                print(f"=== DRAW3 SOURCE DISK {diskno}: {e['name']} ===")
+                txt = textish(file_sectors(img, e))
+                for j, line in enumerate(txt.splitlines()):
+                    print(f"{j + 1:04d}: {line}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
