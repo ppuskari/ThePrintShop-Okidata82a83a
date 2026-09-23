@@ -5,7 +5,7 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 greeting-card geometry is frozen; R24 restores one lower sign band after the R23 hardware test and is ready for validation.**
+**R21 greeting-card geometry is frozen; R25 shifts the R24 sign down by one native OkiGraph feed for final centering.**
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +33,73 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R25 sign centering: one native feed at the top
+
+R24 hardware measurement put the sign at about 8 mm from the top border and
+about 12 mm from the bottom border.  The seven-band sign-height reduction was
+otherwise correct, so R25 leaves the sign height and all duplicate-band
+selection unchanged and moves the complete sign downward by one native
+OkiGraph graphics feed:
+
+```text
+15/144 inch = 0.104167 inch = 2.646 mm
+```
+
+Expected margins from the R24 measurement are therefore approximately:
+
+```text
+top:     8.0 + 2.646 = 10.646 mm
+bottom: 12.0 - 2.646 =  9.354 mm
+```
+
+The extra motion is sign-only.  GCDRAW calls a small helper at the old
+suppressed startup-LF36 location.  The helper checks `PS_MAIN_TYPE=$95F5`;
+only sign mode (value 2) enters OkiGraph graphics with the normal SENDGC entry
+and immediately performs one native `CRLF X=0,Y=1`, which emits the proven:
+
+```text
+$03 $0E
+```
+
+For greeting cards and every non-sign mode, the helper returns immediately,
+so the frozen R21 card geometry is unchanged.
+
+The helper lives in unused tail space of MENUS7 at `$6ECA`.  This keeps
+DRAW1 below its fixed DOS allocation while making the sign-top adjustment
+explicit and sign-specific.
+
+R25 retains the R24 seven-band sign reduction:
+
+```text
+7 x 15/144 inch = 18.521 mm
+```
+
+and therefore changes only the sign's vertical origin, not its rendered
+height.
+
+Validated R25 overlays:
+
+```text
+PRCOMS.OKI
+length 2039
+SHA256 7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137
+
+MENUS7.OKI
+length 3037
+SHA256 f564dcc57a958188fa2fcd58abb64d3a21c3cc16a8ff41b4c156166c117a9bae
+
+GCDRAW.OKI -> runtime DRAW1
+length 2811
+SHA256 41f8468c372f6f72e8134693581a5bb10947d82bd1fa6dc685248ab87d655c04
+```
+
+Validated R25 runtime image:
+
+```text
+size   143360 bytes
+SHA256 e21bd92bbab332133ea7d0673674432b13a6e02a783b4dbe987dee3fc51e38bf
+```
 
 ## R24 sign height: restore one lower duplicate band
 
