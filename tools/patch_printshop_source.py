@@ -451,6 +451,102 @@ def patch_gcdraw(text: str) -> str:
         "GCDRAW.S type-5 card row resampler",
     )
 
+BDRAW_TEXT_OLD = """BSTR6 LDX #00
+ LDY #01
+ JSR CRLF"""
+
+BDRAW_TEXT_NEW = """BSTR6 JSR R29BTXT"""
+
+BDRAW_ICON_OLD = """BICON2 LDA #01
+ TAY
+ AND XCUR
+ ORA #06
+ TAX
+ JSR CRLF"""
+
+BDRAW_ICON_NEW = """BICON2 JSR R29BICO"""
+
+BDRAW_R29_HELPERS = """*
+* R29 OKIGRAPH I BANNER GEOMETRY.
+* TEXT: 3 SOURCE SLICES -> 4 NATIVE 15/144 FEEDS (1,1,2).
+* ICON: 15 SOURCE SLICES -> 13 POSITIONS BY TWO EVEN ZERO-FEED MERGES.
+* NON-TYPE-5 PRINTERS RETAIN THE ORIGINAL CRLF PARAMETERS.
+*
+R29BTXT LDA PRTYPE
+ CMP #05
+ BNE R29TOLD
+ INC R29TPH
+ LDA R29TPH
+ CMP #03
+ BCC R29TONE
+ LDA #00
+ STA R29TPH
+ LDY #02
+ BNE R29TGO
+R29TONE LDY #01
+R29TGO LDX #00
+ JMP CRLF
+R29TOLD LDX #00
+ LDY #01
+ JMP CRLF
+R29TPH HEX 00
+*
+R29BICO LDA PRTYPE
+ CMP #05
+ BNE R29IOLD
+ LDA XCUR
+R29IMOD CMP #15
+ BCC R29IREM
+ SBC #15
+ BCS R29IMOD
+R29IREM CMP #00
+ BEQ R29IMERG
+ CMP #08
+ BEQ R29IMERG
+ LDX #00
+ LDY #01
+ JMP CRLF
+R29IMERG LDX #02
+ LDY #01
+ JMP CRLF
+R29IOLD LDA #01
+ TAY
+ AND XCUR
+ ORA #06
+ TAX
+ JMP CRLF
+*"""
+
+
+def patch_bdraw(text: str) -> str:
+    patched = replace_once(
+        text,
+        BDRAW_TEXT_OLD,
+        BDRAW_TEXT_NEW,
+        "BDRAW.S banner text spacing hook",
+    )
+    patched = replace_once(
+        patched,
+        BDRAW_ICON_OLD,
+        BDRAW_ICON_NEW,
+        "BDRAW.S banner icon spacing hook",
+    )
+
+    lines = patched.splitlines()
+    end_index = next(
+        (
+            i for i in range(len(lines) - 1, -1, -1)
+            if lines[i].strip().upper() == "END"
+        ),
+        None,
+    )
+    if end_index is None:
+        raise RuntimeError("BDRAW.S has no final END directive")
+    helper_lines = BDRAW_R29_HELPERS.splitlines()
+    lines[end_index:end_index] = helper_lines
+    return "\n".join(lines) + ("\n" if patched.endswith("\n") else "")
+
+
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("ascii", "replace")).hexdigest()
 
@@ -726,13 +822,16 @@ def main() -> int:
     prcoms_info = binary_source_info(disk1, "PRCOMS.S")
     menus7_info = binary_source_info(disk2, "MENUS7.S")
     gcdraw_info = binary_source_info(disk2, "GCDRAW.S")
+    bdraw_info = binary_source_info(disk2, "BDRAW.S")
     prcoms = prcoms_info["text"]
     menus7 = menus7_info["text"]
     gcdraw = gcdraw_info["text"]
+    bdraw = bdraw_info["text"]
 
     patched_prcoms = patch_prcoms(prcoms)
     patched_menus7 = patch_menus(menus7)
     patched_gcdraw = patch_gcdraw(gcdraw)
+    patched_bdraw = patch_bdraw(bdraw)
 
     # These are the two invariants that keep the first hardware build
     # deliberately low-risk.
@@ -755,6 +854,8 @@ def main() -> int:
     print(f"  MENUS7 decoded SHA256 after : {sha256_text(patched_menus7)}")
     print(f"  GCDRAW decoded SHA256 before: {sha256_text(gcdraw)}")
     print(f"  GCDRAW decoded SHA256 after : {sha256_text(patched_gcdraw)}")
+    print(f"  BDRAW decoded SHA256 before : {sha256_text(bdraw)}")
+    print(f"  BDRAW decoded SHA256 after  : {sha256_text(patched_bdraw)}")
 
     if args.output_dir:
         args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -766,6 +867,9 @@ def main() -> int:
         )
         (args.output_dir / "GCDRAW.OKI.S").write_text(
             patched_gcdraw, encoding="ascii", newline="\n"
+        )
+        (args.output_dir / "BDRAW.OKI.S").write_text(
+            patched_bdraw, encoding="ascii", newline="\n"
         )
         print(f"  wrote decoded patched source to: {args.output_dir}")
 
