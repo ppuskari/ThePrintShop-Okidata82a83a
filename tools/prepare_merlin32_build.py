@@ -55,15 +55,17 @@ def main() -> int:
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
-    glines = gcdraw_orig.splitlines()
-    print("=== GCDRAW CREDBUF / PIECE / SIDE references ===")
-    for j, line in enumerate(glines):
-        if any(k in line for k in ("CREDBUF", "PIECE", "SIDE")):
-            lo = max(0, j - 3)
-            hi = min(len(glines), j + 4)
-            print(f"--- around line {j + 1} ---")
-            for k in range(lo, hi):
-                print(f"{k + 1:04d}: {glines[k]}")
+    from inspect_printshop_source import catalog, file_sectors, textish
+    entries = list(catalog(d2))
+    print("=== DISK 2 CATALOG ===")
+    for e in entries:
+        print(e["name"])
+    for e in entries:
+        if e["name"].upper().startswith("DRAW3"):
+            print("=== DRAW3 SOURCE ===")
+            txt = textish(file_sectors(d2, e))
+            for j, line in enumerate(txt.splitlines()):
+                print(f"{j + 1:04d}: {line}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
