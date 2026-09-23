@@ -113,12 +113,17 @@ def verify_original(img: bytes) -> None:
         digest = sha256(payload)
         if name == "DRAW3":
             prefix = payload[:1791]
+            tail = payload[1791:]
             print(
                 "  DRAW3 discovery: "
                 f"full_sha256={digest} "
                 f"prefix1791_sha256={sha256(prefix)} "
                 f"source_prefix_match="
-                f"{sha256(prefix) == '16d6264b3a6f815f4138677967b235b37582713ec5bcc2c23f39cbeb3082282f'}"
+                f"{sha256(prefix) == '16d6264b3a6f815f4138677967b235b37582713ec5bcc2c23f39cbeb3082282f'} "
+                f"tail_len={len(tail)} "
+                f"tail_sha256={sha256(tail)} "
+                f"tail_nonzero={sum(1 for b in tail if b)} "
+                f"tail_first64={tail[:64].hex()}"
             )
         if digest != expect["sha256"]:
             raise RuntimeError(
