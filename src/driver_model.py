@@ -148,3 +148,26 @@ def r9_card_band_starts() -> list[int]:
         rowcnt -= 1
         starts.append(source)
     return starts
+
+
+def banner_text_x(bitcnt: int) -> int:
+    """R28 type-5 banner text spacing selector.
+
+    BDRAW counts BITCNT from 8 down through 1 for each source-byte group.
+    The resident helper maps that to X=BITCNT-1 before calling the ordinary
+    type-5 CRLF path.
+    """
+    if not 1 <= bitcnt <= 8:
+        raise ValueError("banner BITCNT must be 1..8")
+    return bitcnt - 1
+
+
+def banner_icon_x(xcur: int) -> int:
+    """R28 type-5 banner icon spacing selector.
+
+    Every eighth source slice overstrikes at X=2; the other seven use X=0
+    and therefore one native 15/144-inch graphics feed.
+    """
+    if not 0 <= xcur < 88:
+        raise ValueError("banner XCUR must be 0..87")
+    return 2 if (xcur & 7) == 0 else 0
