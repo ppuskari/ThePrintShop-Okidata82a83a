@@ -55,20 +55,9 @@ def main() -> int:
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
 
-    print("=== PRCOMS printer state symbols ===")
-    for j, line in enumerate(prcoms_orig.splitlines()):
-        if any(k in line for k in ("PRTYPE", "FIX80", "SETLF5", "CRLF5")):
-            print(f"{j + 1:04d}: {line}")
-    from inspect_printshop_source import catalog, file_sectors, textish
-    d3 = load_image(None, 2)
-    entries = list(catalog(d3))
-    for e in entries:
-        if e["name"].upper() == "LHDRAW.S":
-            txt = textish(file_sectors(d3, e))
-            print("=== LHDRAW MOVIT tail ===")
-            lines = txt.splitlines()
-            for j in range(max(0, len(lines)-120), len(lines)):
-                print(f"{j + 1:04d}: {lines[j]}")
+    print("=== PRCOMS first 50 lines ===")
+    for j, line in enumerate(prcoms_orig.splitlines()[:50]):
+        print(f"{j + 1:04d}: {line}")
 
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
