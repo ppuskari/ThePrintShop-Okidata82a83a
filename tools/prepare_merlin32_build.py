@@ -68,7 +68,7 @@ def main() -> int:
     for marker in ("BSTR6", "CPY #40", "JMP BSTR6", "BICON2"):
         for i, line in enumerate(lines):
             if marker in line:
-                lo = max(0, i - 5)
+                lo = max(0, i - (35 if marker == "BICON2" else 5))
                 hi = min(len(lines), i + 8)
                 print(f"R29-BDRAW-CONTEXT {marker}:")
                 for row in lines[lo:hi]:
