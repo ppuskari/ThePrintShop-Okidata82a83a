@@ -457,16 +457,54 @@ BDRAW_TEXT_OLD = """BSTR6 LDX #00
 
 BDRAW_TEXT_NEW = """BSTR6 JSR R29BTXT"""
 
-BDRAW_ICON_OLD = re.compile(
-    r"(?m)^BICON2[ \\t]+LDA[ \\t]+#(?:\\$)?0?1[ \\t]*\\n"
-    r"[ \\t]+TAY[ \\t]*\\n"
-    r"[ \\t]+AND[ \\t]+XCUR[ \\t]*\\n"
-    r"[ \\t]+ORA[ \\t]+#(?:\\$)?0?6[ \\t]*\\n"
-    r"[ \\t]+TAX[ \\t]*\\n"
-    r"[ \\t]+JSR[ \\t]+CRLF[ \\t]*$"
-)
-
 BDRAW_ICON_NEW = """BICON2 JSR R29BICO"""
+
+
+def replace_bdraw_icon_hook(text: str) -> str:
+    """Replace the single historical BICON2 spacing block.
+
+    This is intentionally line-oriented rather than regex-format-dependent.
+    The 1987 Big Mac source varies whitespace and numeric spelling, but the
+    semantic landmarks are stable: BICON2, XCUR, TAX, and the terminating
+    JSR CRLF.
+    """
+    lines = text.splitlines()
+    starts = [
+        i for i, line in enumerate(lines)
+        if line.lstrip().startswith("BICON2")
+    ]
+    if len(starts) != 1:
+        raise RuntimeError(
+            "BDRAW.S banner icon spacing hook: expected exactly one "
+            f"BICON2 label, found {len(starts)}"
+        )
+
+    start = starts[0]
+    end = None
+    for i in range(start, min(start + 12, len(lines))):
+        compact = " ".join(lines[i].strip().split()).upper()
+        if compact == "JSR CRLF":
+            end = i
+            break
+
+    if end is None:
+        raise RuntimeError(
+            "BDRAW.S banner icon spacing hook: BICON2 block has no "
+            "nearby JSR CRLF terminator"
+        )
+
+    block = "\n".join(lines[start:end + 1]).upper()
+    required = ("LDA", "TAY", "XCUR", "ORA", "TAX", "JSR CRLF")
+    missing = [token for token in required if token not in block]
+    if missing:
+        raise RuntimeError(
+            "BDRAW.S banner icon spacing hook: BICON2 block is missing "
+            + ", ".join(missing)
+        )
+
+    lines[start:end + 1] = [BDRAW_ICON_NEW]
+    suffix = "\n" if text.endswith("\n") else ""
+    return "\n".join(lines) + suffix
 
 BDRAW_R29_HELPERS = """*
 * R29 OKIGRAPH I BANNER GEOMETRY.
@@ -527,13 +565,7 @@ def patch_bdraw(text: str) -> str:
         BDRAW_TEXT_NEW,
         "BDRAW.S banner text spacing hook",
     )
-    icon_matches = list(BDRAW_ICON_OLD.finditer(patched))
-    if len(icon_matches) != 1:
-        raise RuntimeError(
-            "BDRAW.S banner icon spacing hook: expected exactly one "
-            f"BICON2/XCUR/CRLF sequence, found {len(icon_matches)}"
-        )
-    patched = BDRAW_ICON_OLD.sub(BDRAW_ICON_NEW, patched, count=1)
+    patched = replace_bdraw_icon_hook(patched)
 
     lines = patched.splitlines()
     end_index = next(
