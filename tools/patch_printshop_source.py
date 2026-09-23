@@ -585,7 +585,7 @@ def patch_menus(text: str) -> str:
         MENUS_INIT_NEW,
         "MENUS7.S type-5 state initialization",
     )
-    ends = list(re.finditer(r"(?m)^[ \\t]*END\\b.*$", patched))
+    ends = list(re.finditer(r"(?m)^[ \t]*END\b.*$", patched))
     if not ends:
         raise RuntimeError("MENUS7.S: END directive not found")
     m = ends[-1]
