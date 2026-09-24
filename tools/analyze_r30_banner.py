@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused R30 banner-text fit analysis for historical Print Shop BDRAW.S.
+r"""Focused R30 banner-text fit analysis for historical Print Shop BDRAW.S.
 
 This deliberately does not patch anything. It extracts the archived 1987
 BDRAW.S and reports the exact banner-text control-flow neighborhood needed to
@@ -66,6 +66,11 @@ def occurrences(lines: list[str], token: str) -> list[int]:
     return [i for i, line in enumerate(lines) if token in line.upper()]
 
 
+def jsr_occurrences(lines: list[str], target: str) -> list[int]:
+    pat = re.compile(r"^\s*JSR\s+" + re.escape(target) + r"\b", re.I)
+    return [i for i, line in enumerate(lines) if pat.search(line)]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -108,7 +113,10 @@ def main() -> int:
 
     # Show one contiguous window containing the text loop.
     print("=== BANNER TEXT CONTROL FLOW ===")
-    print_lines(lines, max(0, bstr2 - 24), min(len(lines), bstr6 + 28))
+    # The full BSTR text engine matters for row replay: BSTR6 builds the row,
+    # SENDGC occurs later, and BSTR15/BSTR16 advance source state.
+    bstr12 = find_label(lines, "BSTR12")
+    print_lines(lines, max(0, bstr2 - 12), min(len(lines), bstr12 + 45))
     print("")
 
     print("=== BANNER ICON HOOK ===")
@@ -116,7 +124,7 @@ def main() -> int:
     print("")
 
     print("=== SENDGC REFERENCES IN BDRAW.S ===")
-    sendgc = occurrences(lines, "SENDGC")
+    sendgc = jsr_occurrences(lines, "SENDGC")
     for idx in sendgc:
         print(f"-- SENDGC at line {idx + 1} --")
         print_lines(lines, idx - 8, idx + 9)
@@ -131,53 +139,37 @@ def main() -> int:
         print_lines(lines, idx - 3, idx + 4)
         print("")
 
-    # The critical R30 question: is BSTR6 immediately downstream of a SENDGC?
-    prior_send = [i for i in sendgc if i < bstr6]
-    if prior_send:
-        closest = prior_send[-1]
-        print("=== REPLAY FIT CHECK ===")
+    # R30 replay must hook after the actual row send and before the source
+    # row/bit state advances. Report the nearest text SENDGC and everything
+    # through BSTR16.
+    text_sends = [i for i in sendgc if bstr6 < i < bicon2]
+    print("=== REPLAY FIT CHECK ===")
+    if len(text_sends) != 1:
         print(
-            f"closest SENDGC before BSTR6: line {closest + 1}; "
-            f"BSTR6: line {bstr6 + 1}; "
-            f"distance: {bstr6 - closest} source lines"
+            f"Expected exactly one text JSR SENDGC between BSTR6 and BICON2; "
+            f"found {len(text_sends)}"
         )
-        print("Intervening source:")
-        print_lines(lines, closest, bstr6 + 1)
+    else:
+        send = text_sends[0]
+        bstr15 = find_label(lines, "BSTR15")
+        bstr16 = find_label(lines, "BSTR16")
+        print(f"text JSR SENDGC: line {send + 1}")
+        print(f"BSTR15 source-advance gate: line {bstr15 + 1}")
+        print(f"BSTR16 continuation: line {bstr16 + 1}")
+        print("Post-SENDGC through source advance:")
+        print_lines(lines, send - 10, bstr16 + 18)
         print("")
-
-        between = "\n".join(lines[closest:bstr6 + 1]).upper()
-        suspicious = []
-        for token in (
-            "INC ",
-            "DEC ",
-            "ASL ",
-            "LSR ",
-            "ROL ",
-            "ROR ",
-            "ADC ",
-            "SBC ",
-            "STA ",
-            "STX ",
-            "STY ",
-        ):
-            if token in between:
-                suspicious.append(token.strip())
-        if suspicious:
+        if send < bstr15:
             print(
-                "State-mutating instructions occur between SENDGC and BSTR6: "
-                + ", ".join(sorted(set(suspicious)))
-            )
-            print(
-                "A replay helper must preserve/restore their affected state "
-                "or hook before those mutations."
+                "PASS: the text row is sent before BSTR15 advances BITCNT/"
+                "SADDR. A duplicate-row hook can execute after SENDGC while "
+                "the source-row state is still current."
             )
         else:
             print(
-                "No obvious state mutation appears between SENDGC and BSTR6; "
-                "direct row replay is a strong candidate."
+                "FAIL: source-row state advances before or at SENDGC; direct "
+                "row replay would require reconstruction."
             )
-    else:
-        print("No SENDGC found before BSTR6; direct replay is not established.")
 
     print("")
     print("=== R30 BYTE BUDGET BEFORE SOURCE RECLAIM ===")
