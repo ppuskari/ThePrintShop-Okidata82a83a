@@ -10,7 +10,6 @@ on:
       - "tools/prepare_merlin32_build.py"
       - "tools/validate_overlay_build.py"
       - "tools/build_runtime_disk.py"
-      - "tools/analyze_r30_banner.py"
       - "scripts/Build-RuntimeDisk.ps1"
       - ".github/workflows/runtime-build.yml"
 
@@ -25,9 +24,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Analyze R30 banner text fit
-        shell: powershell
-        run: py -3 tools\analyze_r30_banner.py
       - name: Build runnable disk
         shell: powershell
         run: .\scripts\Build-RuntimeDisk.ps1
@@ -41,9 +37,9 @@ jobs:
             throw "Unexpected runtime disk size $($Info.Length)"
           }
           Get-FileHash -Algorithm SHA256 $Disk
-      - name: Upload deployable R29 disk
+      - name: Upload deployable R30 disk
         uses: actions/upload-artifact@v4
         with:
-          name: PrintShop-Okidata82a83a-OkiGraphI-R29
+          name: PrintShop-Okidata82a83a-OkiGraphI-R30
           path: build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
           if-no-files-found: error
