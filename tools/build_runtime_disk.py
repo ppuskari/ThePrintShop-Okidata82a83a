@@ -556,12 +556,25 @@ def patch_banner_draw4_payload(
         BANNER_ICON_CALL,
         "BICON2 spacing site",
     )
-    strsub_off = _find_unique_bytes(
-        payload,
-        R30_STRSUB_OLD,
-        "STRSUB prologue",
-    )
     strsend_off, strsend_end, strsub_addr = _find_r30_strsend(payload)
+    strsub_off = strsub_addr - load
+    if not (
+        0 <= strsub_off
+        <= len(payload) - len(R30_STRSUB_OLD)
+    ):
+        raise RuntimeError(
+            f"DRAW4: STRSEND points outside DRAW4 to STRSUB "
+            f"0x{strsub_addr:04X}"
+        )
+    found_strsub = payload[
+        strsub_off:strsub_off + len(R30_STRSUB_OLD)
+    ]
+    if found_strsub != R30_STRSUB_OLD:
+        raise RuntimeError(
+            "DRAW4: STRSEND target does not contain the historical "
+            f"STRSUB prologue at +0x{strsub_off:04X}; "
+            f"found {found_strsub.hex(' ')}"
+        )
 
     if text_off != 0x0085:
         raise RuntimeError(
@@ -571,12 +584,6 @@ def patch_banner_draw4_payload(
         raise RuntimeError(
             f"DRAW4: BICON2 moved from +0x02BE to +0x{icon_off:04X}"
         )
-    if load + strsub_off != strsub_addr:
-        raise RuntimeError(
-            "DRAW4: STRSEND JSR target does not match located STRSUB "
-            f"(0x{strsub_addr:04X} vs 0x{load + strsub_off:04X})"
-        )
-
     bstr9_addr = load + strsub_off + len(R30_STRSUB_OLD)
     feed_helper_addr = load + strsub_off + 7
 
