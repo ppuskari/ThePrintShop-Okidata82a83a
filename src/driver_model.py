@@ -151,15 +151,21 @@ def r9_card_band_starts() -> list[int]:
 
 
 
-def banner_text_x(bitcnt: int) -> int:
-    """R29 banner-text X value derived from Print Shop BITCNT.
+def banner_text_duplicate(bitcnt: int, saddr: int) -> bool:
+    """R30 true-row duplicate schedule for OkiGraph banner text.
 
-    BSTR6 preserves Y=1. The shared DRAW4 helper decrements BITCNT's 8..1
-    sequence into X=7..0 before tail-jumping to PRCOMS CRLF.
+    BITCNT counts 8..1 within each font byte. Rows 8 and 5 are duplicated in
+    every group. Row 2 is duplicated except in SADDR groups congruent to 2
+    modulo 4. Four complete groups therefore schedule 11 duplicate rows:
+    32 source rows -> 43 physical rows, close to the ideal 42 2/3.
     """
     if not 1 <= bitcnt <= 8:
         raise ValueError("BITCNT must be in 1..8")
-    return bitcnt - 1
+    if saddr < 0:
+        raise ValueError("SADDR must be non-negative")
+    if bitcnt in (8, 5):
+        return True
+    return bitcnt == 2 and (saddr & 3) != 2
 
 
 def banner_icon_x(xcur: int) -> int:

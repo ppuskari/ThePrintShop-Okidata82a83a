@@ -5,7 +5,10 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 greeting cards, R26 signs, and R27 stationery are hardware-golden; R29 isolates banner text/icon geometry fixes inside DRAW4.**
+**Current prerelease: R30 hardware-golden on physical OkiGraph I hardware. R21 greeting cards, R26 signs, R27 stationery, and R30 banners are validated.**
+
+
+Reproducible prerelease details, frozen hashes, and rebuild instructions are in [PRERELEASE.md](PRERELEASE.md).
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -33,6 +36,89 @@ logical $03         -> send $03,$03
 The doubled-ETX rule restores the historical Okidata type-5 literal-data
 escape and eliminated the progressive horizontal column loss seen in earlier
 builds.
+
+## R30 banner text: true native-row densification
+
+R30 keeps the hardware-good R29 banner-icon geometry byte-for-byte and
+replaces only the banner-text spacing approximation with real raster-row
+replay.
+
+The source audit proved that BSTR builds each current font row into `IBUF`,
+then STRSUB/BSTR9..BSTR12 transmits that row, and only after STRSUB returns do
+BSTR13/BSTR15 advance `BITCNT` and `SADDR`. R30 therefore reuses the
+already-built `IBUF` row instead of reconstructing or rewinding font data.
+
+The exact shipped DRAW4 remains the address basis:
+
+```text
+load              $7800
+original payload  1012 bytes
+BSTR6              +$0085
+STRSEND            +$00B7, 37 bytes
+STRSUB             +$00FF
+BICON2             +$02BE
+```
+
+R30 makes three fixed-size changes:
+
+1. **BSTR6 stays historical.** `LDX #0 / LDY #1 / JSR CRLF` is left
+   untouched. Once type-5 graphics is active this is the proven native
+   OkiGraph `$03,$0E` 15/144-inch feed.
+2. **STRSUB is monomorphized for the monochrome Oki path.** The historical
+   `COLOR=0` calculation yields `RBTEMP=$FE`; R30 sets that value directly
+   and jumps to BSTR9. The five now-unreachable bytes at `$7906` become a
+   private row-feed entry: `LDX #0 / JMP CRLF`.
+3. **STRSEND's 37-byte color wrapper is replaced in place.** Every nonblank
+   source row is sent once. Selected rows are then advanced by one native
+   feed and the exact same `IBUF` raster is sent a second time.
+
+Duplicate selection uses existing immutable source position, not a private
+phase variable:
+
+```text
+BITCNT 8  -> duplicate
+BITCNT 5  -> duplicate
+BITCNT 2  -> duplicate except when (SADDR & 3) == 2
+```
+
+Across four complete eight-row source groups this produces:
+
+```text
+32 source rows
+11 duplicate rows
+43 physical rows
+
+43 * 15/144 = 645/144 inch
+historical target:
+32 * 20/144 = 640/144 inch
+
+geometry error = +0.78125%
+```
+
+A selected all-blank source row never enters STRSEND and is therefore not
+replayed. That deliberately keeps blank regions tighter; it does not alter the
+future schedule because selection derives directly from `BITCNT/SADDR`.
+
+The R29 icon patch and its EOF helper at `$7BF4-$7BFB` are unchanged. No
+existing address moves, no DOS sector is allocated, the VTOC/T/S lists remain
+untouched, and resident SYSLIB remains 4773 bytes.
+
+Validated R30 runtime:
+
+```text
+DRAW4
+length  1020
+RAM     $7800-$7BFB
+packed  1024/1024
+SHA256  4360a87c4663b50aad99c6a5f7fca75f997d3b23ff8e73bd3f783619f9d03235
+
+runtime disk
+size    143360
+SHA256  2e5ab070988b3b36df0072577c2ebf57c61cf616551a0ef10c88f3cac0db387f
+```
+
+R30 remains an Oki/type-5 banner hardware-test branch. Cards, signs, and
+stationery continue to use the frozen R21/R26/R27 paths.
 
 ## R29 banner: in-place DRAW4 geometry correction
 
