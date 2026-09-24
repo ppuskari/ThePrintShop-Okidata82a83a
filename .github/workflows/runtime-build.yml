@@ -10,6 +10,7 @@ on:
       - "tools/prepare_merlin32_build.py"
       - "tools/validate_overlay_build.py"
       - "tools/build_runtime_disk.py"
+      - "tools/analyze_r30_banner.py"
       - "scripts/Build-RuntimeDisk.ps1"
       - ".github/workflows/runtime-build.yml"
 
