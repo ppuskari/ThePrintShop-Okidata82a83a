@@ -11,7 +11,14 @@ from __future__ import annotations
 import pathlib
 import re
 
-from patch_printshop_source import binary_source_text, load_image
+from patch_printshop_source import (
+    binary_source_info,
+    binary_source_text,
+    file_sector_locations,
+    load_image,
+    patch_menus,
+    patch_prcoms,
+)
 
 
 def show_hits(lines: list[str], pattern: str, radius: int = 8) -> None:
@@ -49,6 +56,43 @@ def main() -> int:
 
     pl = pr.splitlines()
     ml = menus.splitlines()
+
+    print("=== EXACT MENUS7 PRINTER BLOCK ===")
+    for n in range(1, min(181, len(ml) + 1)):
+        print(f"{n:5d}: {ml[n - 1]}")
+    print("")
+
+    print("=== EXACT PRCOMS CORE BLOCKS ===")
+    for lo, hi in ((120, 245), (330, 455), (465, 510)):
+        print(f"-- PRCOMS lines {lo}-{hi} --")
+        for n in range(lo, min(hi + 1, len(pl) + 1)):
+            print(f"{n:5d}: {pl[n - 1]}")
+        print("")
+
+    for pat in (r"\\bPRMAX\\b", r"\\bPRLIST\\b", r"\\bPRPARAMS\\b"):
+        show_hits(ml, pat, radius=5)
+
+    print("=== DOS ALLOCATION BUDGET ===")
+    for img, name, patcher in (
+        (d1, "PRCOMS.S", patch_prcoms),
+        (d2, "MENUS7.S", patch_menus),
+    ):
+        info = binary_source_info(img, name)
+        locs = file_sector_locations(img, info["entry"])
+        capacity = len(locs) * 256
+        original_payload = len(info["payload"])
+        patched_text = patcher(info["text"])
+        patched_payload = len(
+            patched_text.replace("\\n", "\\r").encode("ascii")
+        )
+        print(
+            f"{name}: sectors={len(locs)} capacity={capacity} "
+            f"original_payload={original_payload} "
+            f"current_patched_payload={patched_payload} "
+            f"remaining_after_header="
+            f"{capacity - 4 - patched_payload}"
+        )
+    print("")
 
     print("=== PRCOMS TYPE DISPATCH / TABLE AUDIT ===")
     for pat in (
