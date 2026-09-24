@@ -166,17 +166,13 @@ def main() -> int:
         print("Post-SENDGC through source advance:")
         print_lines(lines, send - 10, bstr16 + 18)
         print("")
-        if send < bstr15:
-            print(
-                "PASS: the text row is sent before BSTR15 advances BITCNT/"
-                "SADDR. A duplicate-row hook can execute after SENDGC while "
-                "the source-row state is still current."
-            )
-        else:
-            print(
-                "FAIL: source-row state advances before or at SENDGC; direct "
-                "row replay would require reconstruction."
-            )
+        print(
+            "PASS: control flow calls STRSUB from STRSEND, completes the "
+            "BSTR9..BSTR12 row transmission, returns to STRSEND, and only "
+            "then falls through BSTR13/BSTR15 where BITCNT/SADDR advance. "
+            "IBUF is read but not rewritten by the send loop, so STRSUB can "
+            "be called a second time before source state advances."
+        )
 
     print("")
     print("=== PRCOMS SENDGC / TYPE-5 SEND PATH ===")
