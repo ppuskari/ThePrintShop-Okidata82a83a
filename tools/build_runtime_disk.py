@@ -339,6 +339,15 @@ R29_HELPER_BYTES = bytes.fromhex(
     "F0 02 A2 01 CA 4C 03 18"
 )
 
+R30_DRAW4_SHA256 = (
+    "4360a87c4663b50aad99c6a5f7fca75"
+    "f997d3b23ff8e73bd3f783619f9d03235"
+)
+R30_IMAGE_SHA256 = (
+    "2e5ab070988b3b36df0072577c2ebf57"
+    "c61cf616551a0ef10c88f3cac0db387f"
+)
+
 R30_STRSUB_OLD = bytes.fromhex(
     "46 5D B0 01 60 A6 5F CA 8A 0A 85 5E"
 )
@@ -711,6 +720,12 @@ def patch_banner_draw4(img: bytes) -> tuple[bytes, bytes]:
         )
 
     patched_payload, info = patch_banner_draw4_payload(payload, load)
+    patched_hash = sha256(patched_payload)
+    if patched_hash != R30_DRAW4_SHA256:
+        raise RuntimeError(
+            "DRAW4: R30 deterministic hash mismatch; expected "
+            f"{R30_DRAW4_SHA256}, got {patched_hash}"
+        )
 
     # 4-byte DOS binary header + 1020-byte payload = exactly four sectors.
     entry = find_entry(img, "DRAW4")
@@ -877,6 +892,11 @@ def main() -> int:
     args.output.write_bytes(img)
 
     digest = sha256(img)
+    if digest != R30_IMAGE_SHA256:
+        raise RuntimeError(
+            "R30 runtime image hash mismatch; expected "
+            f"{R30_IMAGE_SHA256}, got {digest}"
+        )
     print(f"Runtime image: {args.output}")
     print(f"Image bytes: {len(img)}")
     print(f"Image SHA256: {digest}")
