@@ -10,6 +10,7 @@ on:
       - "tools/prepare_merlin32_build.py"
       - "tools/validate_overlay_build.py"
       - "tools/build_runtime_disk.py"
+      - "tools/analyze_r31_printer_types.py"
       - "scripts/Build-RuntimeDisk.ps1"
       - ".github/workflows/runtime-build.yml"
 
@@ -24,6 +25,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Analyze printer type split
+        shell: powershell
+        run: py -3 tools\analyze_r31_printer_types.py
       - name: Build runnable disk
         shell: powershell
         run: .\scripts\Build-RuntimeDisk.ps1
