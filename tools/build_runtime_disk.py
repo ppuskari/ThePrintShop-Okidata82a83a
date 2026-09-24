@@ -354,6 +354,8 @@ def _branch_target(instruction_offset: int, operand: int) -> int:
 
 def _find_r30_strsend(
     payload: bytes,
+    *,
+    before_offset: int | None = None,
 ) -> tuple[int, int, int]:
     """Locate and validate the historical STRSEND color wrapper.
 
@@ -439,12 +441,18 @@ def _find_r30_strsend(
         ) != send3:
             continue
 
-        hits.append((start, end, strsub_addr))
+        if before_offset is None or start < before_offset:
+            hits.append((start, end, strsub_addr))
 
     if len(hits) != 1:
         raise RuntimeError(
-            "DRAW4: expected one historical STRSEND wrapper, "
-            f"found {len(hits)}"
+            "DRAW4: expected one historical text STRSEND wrapper"
+            + (
+                f" before +0x{before_offset:04X}"
+                if before_offset is not None
+                else ""
+            )
+            + f", found {len(hits)}"
         )
     return hits[0]
 
@@ -556,7 +564,10 @@ def patch_banner_draw4_payload(
         BANNER_ICON_CALL,
         "BICON2 spacing site",
     )
-    strsend_off, strsend_end, strsub_addr = _find_r30_strsend(payload)
+    strsend_off, strsend_end, strsub_addr = _find_r30_strsend(
+        payload,
+        before_offset=icon_off,
+    )
     strsub_off = strsub_addr - load
     if not (
         0 <= strsub_off
