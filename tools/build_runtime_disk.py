@@ -339,120 +339,346 @@ R29_HELPER_BYTES = bytes.fromhex(
     "F0 02 A2 01 CA 4C 03 18"
 )
 
+R30_STRSUB_OLD = bytes.fromhex(
+    "46 5D B0 01 60 A6 5F CA 8A 0A 85 5E"
+)
+
+
+def _signed8(value: int) -> int:
+    return value - 256 if value & 0x80 else value
+
+
+def _branch_target(instruction_offset: int, operand: int) -> int:
+    return instruction_offset + 2 + _signed8(operand)
+
+
+def _find_r30_strsend(
+    payload: bytes,
+) -> tuple[int, int, int]:
+    """Locate and validate the historical STRSEND color wrapper.
+
+    Returns (start, end, STRSUB absolute address). The parser accepts either
+    zero-page or absolute LDX FCOLOR, but validates all three historical
+    branches against their semantic labels before accepting the block.
+    """
+    prefix = bytes.fromhex("84 5B A9 01 85 5D AD F8 95")
+    hits = []
+
+    for start in range(len(payload)):
+        if not payload.startswith(prefix, start):
+            continue
+        p = start + len(prefix)
+
+        if p + 2 > len(payload) or payload[p] != 0xF0:
+            continue
+        beq_send2 = p
+        p += 2
+
+        if p >= len(payload):
+            continue
+        if payload[p] == 0xA6:
+            p += 2
+        elif payload[p] == 0xAE:
+            p += 3
+        else:
+            continue
+
+        if p + 3 > len(payload) or payload[p] != 0xBD:
+            continue
+        p += 3
+
+        if not payload.startswith(bytes.fromhex("85 5D A9 03"), p):
+            continue
+        p += 4
+
+        send2 = p
+        if not payload.startswith(bytes.fromhex("85 5F"), p):
+            continue
+        p += 2
+
+        if p + 2 > len(payload) or payload[p] != 0xF0:
+            continue
+        beq_send4 = p
+        p += 2
+
+        send3 = p
+        if not payload.startswith(bytes.fromhex("A6 5F"), p):
+            continue
+        p += 2
+
+        if p + 3 > len(payload) or payload[p] != 0x20:
+            continue
+        p += 3  # COLORCHG
+
+        send4 = p
+        if p + 3 > len(payload) or payload[p] != 0x20:
+            continue
+        strsub_addr = payload[p + 1] | (payload[p + 2] << 8)
+        p += 3
+
+        if not payload.startswith(bytes.fromhex("C6 5F"), p):
+            continue
+        p += 2
+
+        if p + 2 > len(payload) or payload[p] != 0x10:
+            continue
+        bpl_send3 = p
+        p += 2
+        end = p
+
+        if _branch_target(
+            beq_send2, payload[beq_send2 + 1]
+        ) != send2:
+            continue
+        if _branch_target(
+            beq_send4, payload[beq_send4 + 1]
+        ) != send4:
+            continue
+        if _branch_target(
+            bpl_send3, payload[bpl_send3 + 1]
+        ) != send3:
+            continue
+
+        hits.append((start, end, strsub_addr))
+
+    if len(hits) != 1:
+        raise RuntimeError(
+            "DRAW4: expected one historical STRSEND wrapper, "
+            f"found {len(hits)}"
+        )
+    return hits[0]
+
+
+def _find_unique_bytes(
+    payload: bytes,
+    needle: bytes,
+    what: str,
+) -> int:
+    hits = [
+        i for i in range(len(payload))
+        if payload.startswith(needle, i)
+    ]
+    if len(hits) != 1:
+        raise RuntimeError(
+            f"DRAW4: expected one {what}, found {len(hits)}"
+        )
+    return hits[0]
+
+
+def _build_r30_strsend(
+    *,
+    strsub_addr: int,
+    feed_helper_addr: int,
+    block_len: int,
+) -> bytes:
+    """Build the in-place R30 true-row densifier.
+
+    Schedule:
+      - send every nonblank source row once;
+      - duplicate BITCNT 8 and 5 in every group;
+      - duplicate BITCNT 2 except when (SADDR & 3) == 2.
+
+    Across four complete 8-row groups this schedules 11 duplicates:
+    32 source rows -> 43 physical rows, versus the exact 42 2/3-row target.
+    """
+    out = bytearray()
+    branches: list[tuple[int, str]] = []
+    labels: dict[str, int] = {}
+
+    def emit(*values: int) -> None:
+        out.extend(values)
+
+    def branch(opcode: int, label: str) -> None:
+        emit(opcode, 0)
+        branches.append((len(out) - 1, label))
+
+    emit(0x84, 0x5B)  # STY FNZY
+    emit(0x20, strsub_addr & 0xFF, strsub_addr >> 8)
+    emit(0xA5, 0x58)  # LDA BITCNT
+    emit(0xC9, 0x08)
+    branch(0xF0, "dup")
+    emit(0xC9, 0x05)
+    branch(0xF0, "dup")
+    emit(0xC9, 0x02)
+    branch(0xD0, "done")
+    emit(0xA5, 0x52)  # LDA SADDR
+    emit(0x29, 0x03)
+    emit(0xC9, 0x02)
+    branch(0xF0, "done")
+
+    labels["dup"] = len(out)
+    emit(0xA0, 0x01)  # LDY #1
+    emit(
+        0x20,
+        feed_helper_addr & 0xFF,
+        feed_helper_addr >> 8,
+    )
+    emit(0x20, strsub_addr & 0xFF, strsub_addr >> 8)
+
+    if len(out) > block_len:
+        raise RuntimeError(
+            f"DRAW4: R30 STRSEND needs {len(out)} bytes but "
+            f"historical block has only {block_len}"
+        )
+    out.extend([0xEA] * (block_len - len(out)))
+    labels["done"] = len(out)
+
+    for operand_index, label in branches:
+        target = labels[label]
+        next_pc = operand_index + 1
+        delta = target - next_pc
+        if not -128 <= delta <= 127:
+            raise RuntimeError(
+                f"DRAW4: R30 branch to {label} is out of range"
+            )
+        out[operand_index] = delta & 0xFF
+
+    return bytes(out)
+
 
 def patch_banner_draw4_payload(
     payload: bytes,
     load: int = 0x7800,
 ) -> tuple[bytes, dict[str, int]]:
-    """Patch the exact shipped DRAW4 without relocating existing code.
+    """R30: true banner-text row replay plus frozen R29 icon geometry.
 
-    The shipped DRAW4 payload is 1012 bytes in four DOS data sectors.
-    With the four-byte DOS binary header, that leaves exactly eight bytes
-    in the existing 1024-byte allocation. R29 uses those eight bytes as one
-    shared helper at $7BF4; no new sector and no existing code relocation.
-
-    Text BSTR6:
-      original  LDX #0 / LDY #1 / JSR CRLF
-      R29       LDX BITCNT / LDY #1 / JSR $7BF8
-
-    $7BF8 is the DEX/JMP CRLF suffix of the shared helper. BITCNT runs 8..1,
-    so type-5 X becomes 7..0 while Y remains 1. This reproduces the earlier
-    159/160 text-spacing synthesis without any private phase byte.
-
-    Icon BICON2:
-      R29 sets X=3,Y=1,A=(XCUR & 7), then JSR $7BF4.
-      If A==0 the helper keeps X=3; otherwise it changes X to 1. The shared
-      DEX then maps those to X=2 (zero-feed merge) or X=0 (native feed).
-      Therefore every eighth source slice is overstruck and the other seven
-      use the proven 15/144-inch native OkiGraph feed.
+    The exact shipped 1012-byte DRAW4 remains the address basis. Existing
+    routines are patched length-for-length; the only payload growth remains
+    the already-proven eight-byte R29 icon helper in EOF slack.
     """
-    text_hits = [
-        i for i in range(len(payload))
-        if payload.startswith(BANNER_TEXT_CALL, i)
-    ]
-    icon_hits = [
-        i for i in range(len(payload))
-        if payload.startswith(BANNER_ICON_CALL, i)
-    ]
-    if len(text_hits) != 1:
+    text_off = _find_unique_bytes(
+        payload,
+        BANNER_TEXT_CALL,
+        "BSTR6 native-feed site",
+    )
+    icon_off = _find_unique_bytes(
+        payload,
+        BANNER_ICON_CALL,
+        "BICON2 spacing site",
+    )
+    strsub_off = _find_unique_bytes(
+        payload,
+        R30_STRSUB_OLD,
+        "STRSUB prologue",
+    )
+    strsend_off, strsend_end, strsub_addr = _find_r30_strsend(payload)
+
+    if text_off != 0x0085:
         raise RuntimeError(
-            f"DRAW4: expected one banner-text site, found {len(text_hits)}"
+            f"DRAW4: BSTR6 moved from +0x0085 to +0x{text_off:04X}"
         )
-    if len(icon_hits) != 1:
+    if icon_off != 0x02BE:
         raise RuntimeError(
-            f"DRAW4: expected one banner-icon site, found {len(icon_hits)}"
+            f"DRAW4: BICON2 moved from +0x02BE to +0x{icon_off:04X}"
         )
+    if load + strsub_off != strsub_addr:
+        raise RuntimeError(
+            "DRAW4: STRSEND JSR target does not match located STRSUB "
+            f"(0x{strsub_addr:04X} vs 0x{load + strsub_off:04X})"
+        )
+
+    bstr9_addr = load + strsub_off + len(R30_STRSUB_OLD)
+    feed_helper_addr = load + strsub_off + 7
 
     helper_addr = load + len(payload)
-    common_addr = helper_addr + 4
-
-    # These addresses are part of the R29 safety contract. Existing DRAW4
-    # bytes remain at their original addresses; only the 8-byte EOF slack
-    # becomes newly loaded code.
-    if helper_addr != 0x7BF4 or common_addr != 0x7BF8:
+    if helper_addr != 0x7BF4:
         raise RuntimeError(
-            f"DRAW4: unexpected helper layout "
-            f"0x{helper_addr:04X}/0x{common_addr:04X}"
+            f"DRAW4: expected R29 icon helper at $7BF4, "
+            f"got 0x{helper_addr:04X}"
         )
 
     patched = bytearray(payload)
 
-    text_off = text_hits[0]
-    text_new = bytes([
-        0xA6, 0x58,             # LDX BITCNT
-        0xA0, 0x01,             # LDY #1
-        0x20,                   # JSR common helper
-        common_addr & 0xFF,
-        (common_addr >> 8) & 0xFF,
-    ])
-    if len(text_new) != len(BANNER_TEXT_CALL):
-        raise AssertionError("R29 text patch must be length-preserving")
-    patched[text_off:text_off + len(text_new)] = text_new
+    # BSTR6 intentionally remains the historical X=0,Y=1,JSR CRLF.
+    # Once graphics is active, frozen R27 PRCOMS turns that into one native
+    # $03,$0E feed; no synthetic X spacing remains in R30.
+    if patched[
+        text_off:text_off + len(BANNER_TEXT_CALL)
+    ] != BANNER_TEXT_CALL:
+        raise RuntimeError("DRAW4: BSTR6 native-feed bytes changed unexpectedly")
 
-    icon_off = icon_hits[0]
+    # Preserve the hardware-good R29 icon patch byte-for-byte.
     icon_new = bytes([
         0xA2, 0x03,             # LDX #3
         0xA0, 0x01,             # LDY #1
         0xA5, 0x54,             # LDA XCUR
         0x29, 0x07,             # AND #7
-        0x20,                   # JSR icon helper
+        0x20,                   # JSR $7BF4
         helper_addr & 0xFF,
         (helper_addr >> 8) & 0xFF,
     ])
     if len(icon_new) != len(BANNER_ICON_CALL):
-        raise AssertionError("R29 icon patch must be length-preserving")
+        raise AssertionError("R30 icon patch must remain length-preserving")
     patched[icon_off:icon_off + len(icon_new)] = icon_new
 
+    # Monomorphize STRSUB to the exact historical monochrome setup:
+    # COLOR=0 originally computes RBTEMP=$FE. The normal entry jumps directly
+    # to BSTR9. Its five now-unreachable bytes become a tiny native-feed
+    # helper used only by the duplicate scheduler.
+    strsub_new = bytes([
+        0xA9, 0xFE,             # LDA #$FE
+        0x85, 0x5E,             # STA RBTEMP
+        0x4C,                   # JMP BSTR9
+        bstr9_addr & 0xFF,
+        (bstr9_addr >> 8) & 0xFF,
+        0xA2, 0x00,             # helper: LDX #0
+        0x4C, 0x03, 0x18,       # JMP CRLF; caller supplies Y=1
+    ])
+    if len(strsub_new) != len(R30_STRSUB_OLD):
+        raise AssertionError("R30 STRSUB replacement must be 12 bytes")
+    patched[
+        strsub_off:strsub_off + len(strsub_new)
+    ] = strsub_new
+
+    strsend_len = strsend_end - strsend_off
+    strsend_new = _build_r30_strsend(
+        strsub_addr=strsub_addr,
+        feed_helper_addr=feed_helper_addr,
+        block_len=strsend_len,
+    )
+    patched[strsend_off:strsend_end] = strsend_new
+
+    # Append exactly the hardware-good R29 icon helper. R30 text never enters
+    # it; this makes the icon path byte-for-byte identical to R29.
     patched += R29_HELPER_BYTES
 
     if len(patched) != 1020:
         raise RuntimeError(
-            f"DRAW4: R29 must be exactly 1020 bytes, got {len(patched)}"
+            f"DRAW4: R30 must be exactly 1020 bytes, got {len(patched)}"
         )
     if load + len(patched) != 0x7BFC:
         raise RuntimeError(
-            f"DRAW4: unexpected R29 end 0x{load + len(patched):04X}"
+            f"DRAW4: unexpected R30 end 0x{load + len(patched):04X}"
         )
+    if patched[1012:] != R29_HELPER_BYTES:
+        raise RuntimeError("DRAW4: R29 icon helper changed in R30")
 
-    # Prove no pre-existing byte outside the two hook ranges moved or changed.
-    allowed = set(range(text_off, text_off + len(text_new)))
-    allowed.update(range(icon_off, icon_off + len(icon_new)))
+    allowed = set(range(icon_off, icon_off + len(icon_new)))
+    allowed.update(range(strsub_off, strsub_off + len(strsub_new)))
+    allowed.update(range(strsend_off, strsend_end))
     changed = {
-        i for i, (old, new) in enumerate(zip(payload, patched[:len(payload)]))
+        i
+        for i, (old, new) in enumerate(
+            zip(payload, patched[:len(payload)])
+        )
         if old != new
     }
     if not changed.issubset(allowed):
         unexpected = sorted(changed - allowed)
         raise RuntimeError(
-            "DRAW4: bytes changed outside R29 hook sites: "
+            "DRAW4: bytes changed outside R30 fixed patch regions: "
             + ", ".join(f"+0x{i:04X}" for i in unexpected)
         )
 
     return bytes(patched), {
         "text_site": text_off,
         "icon_site": icon_off,
-        "helper": helper_addr,
-        "common": common_addr,
+        "strsend_site": strsend_off,
+        "strsend_len": strsend_len,
+        "strsub_site": strsub_off,
+        "strsub_addr": strsub_addr,
+        "feed_helper": feed_helper_addr,
+        "icon_helper": helper_addr,
     }
 
 
@@ -486,20 +712,25 @@ def patch_banner_draw4(img: bytes) -> tuple[bytes, bytes]:
     )
     check_load, check_payload = read_dos_binary(out, "DRAW4")
     if check_load != load or check_payload != patched_payload:
-        raise RuntimeError("DRAW4: R29 patch read-back failed")
+        raise RuntimeError("DRAW4: R30 patch read-back failed")
 
     print(
         "  patched runtime DRAW4 in-place: PASS "
-        f"text +0x{info['text_site']:04X} -> common 0x{info['common']:04X}; "
-        f"icon +0x{info['icon_site']:04X} -> helper 0x{info['helper']:04X}"
+        f"BSTR6 native +0x{info['text_site']:04X}; "
+        f"STRSEND +0x{info['strsend_site']:04X} "
+        f"len={info['strsend_len']}; "
+        f"STRSUB +0x{info['strsub_site']:04X}; "
+        f"icon +0x{info['icon_site']:04X} -> "
+        f"helper 0x{info['icon_helper']:04X}"
     )
     print(
         "  address/state contract: PASS "
-        "BITCNT=$58, XCUR=$54, helper=$7BF4, common=$7BF8, "
-        "no existing address moved"
+        "BITCNT=$58, SADDR=$52, XCUR=$54; "
+        f"row-feed helper=0x{info['feed_helper']:04X}; "
+        "R29 icon helper=$7BF4-$7BFB; no existing address moved"
     )
     print(
-        f"  R29 DRAW4 len={len(patched_payload)} "
+        f"  R30 DRAW4 len={len(patched_payload)} "
         f"RAM=0x{load:04X}-0x{load + len(patched_payload) - 1:04X} "
         f"packed={packed_length}/{capacity} "
         f"sha256={sha256(patched_payload)}"
@@ -537,7 +768,7 @@ def patch_test_paper_cr_only(img: bytes) -> tuple[bytes, bytes]:
     if check_load != load or check_payload != patched_payload:
         raise RuntimeError("SYSLIB paper-position patch read-back failed")
     if len(check_payload) != SYSLIB_BASE_LENGTH:
-        raise RuntimeError("R29 must not grow resident SYSLIB")
+        raise RuntimeError("R30 must not grow resident SYSLIB")
 
     print(
         "  patched SYSLIB TEST PAPER POSITION: PASS; "
@@ -606,7 +837,7 @@ def main() -> int:
     img = rewrite_dos_binary(img, "MENUS7", menus7)
     img = rewrite_dos_binary(img, "DRAW1", gcdraw)
 
-    print("Patching exact shipped DRAW4 runtime for R29 banner geometry...")
+    print("Patching exact shipped DRAW4 runtime for R30 banner text + R29 icon...")
     img, draw4 = patch_banner_draw4(img)
 
     print("Applying R14 paper-position patch without growing SYSLIB...")
@@ -631,7 +862,7 @@ def main() -> int:
     print(f"Runtime image: {args.output}")
     print(f"Image bytes: {len(img)}")
     print(f"Image SHA256: {digest}")
-    print("PASS: R29 banner-contained runnable DOS disk constructed")
+    print("PASS: R30 banner-text-densified runnable DOS disk constructed")
     return 0
 
 
