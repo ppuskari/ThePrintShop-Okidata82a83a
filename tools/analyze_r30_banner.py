@@ -74,13 +74,20 @@ def jsr_occurrences(lines: list[str], target: str) -> list[int]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
+        "--disk1",
+        type=pathlib.Path,
+        help="local 1987 source disk 1 instead of downloading",
+    )
+    ap.add_argument(
         "--disk2",
         type=pathlib.Path,
         help="local 1987 source disk 2 instead of downloading",
     )
     args = ap.parse_args()
 
+    disk1 = load_image(args.disk1, 0)
     disk2 = load_image(args.disk2, 1)
+    prcoms = binary_source_text(disk1, "PRCOMS.S")
     source = binary_source_text(disk2, "BDRAW.S")
     lines = source.splitlines()
 
@@ -170,6 +177,33 @@ def main() -> int:
                 "FAIL: source-row state advances before or at SENDGC; direct "
                 "row replay would require reconstruction."
             )
+
+    print("")
+    print("=== PRCOMS SENDGC / TYPE-5 SEND PATH ===")
+    plines = prcoms.splitlines()
+    send_refs = occurrences(plines, "SENDGC")
+    sgc_refs = occurrences(plines, "SGC5")
+    gc5_refs = occurrences(plines, "GC5")
+    shown = set()
+    for idx in send_refs + sgc_refs + gc5_refs:
+        lo = max(0, idx - 10)
+        hi = min(len(plines), idx + 28)
+        key = (lo, hi)
+        if key in shown:
+            continue
+        shown.add(key)
+        print(f"-- PRCOMS context around line {idx + 1} --")
+        print_lines(plines, lo, hi)
+        print("")
+
+    print("=== SENDGC REGISTER-PRESERVATION HINTS ===")
+    send_jsr = jsr_occurrences(plines, "SENDGC")
+    print(f"PRCOMS internal JSR SENDGC calls: {len(send_jsr)}")
+    print(
+        "Inspect the contexts above for explicit TXA/PHA/TYA/PHA or "
+        "restoration of X/Y. R30 will assume nothing unless the source "
+        "proves it."
+    )
 
     print("")
     print("=== R30 BYTE BUDGET BEFORE SOURCE RECLAIM ===")
