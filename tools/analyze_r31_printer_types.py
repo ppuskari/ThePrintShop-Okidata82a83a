@@ -134,6 +134,30 @@ def main() -> int:
         print(f"{n + 1:5d}: {ml[n]}")
 
     print("")
+    print("=== CRLF CALL-SITE TUPLE AUDIT ===")
+    for disk_index, img in enumerate((d1, d2), start=1):
+        for entry in catalog(img):
+            name = entry["name"]
+            if not name.endswith(".S"):
+                continue
+            try:
+                src = binary_source_text(img, name)
+            except Exception:
+                continue
+            sl = src.splitlines()
+            for i, line in enumerate(sl):
+                if "JSR CRLF" not in line.upper():
+                    continue
+                lo = max(0, i - 5)
+                context = " | ".join(
+                    " ".join(x.strip().split())
+                    for x in sl[lo:i + 1]
+                )
+                print(
+                    f"disk{disk_index} {name} line {i + 1}: {context}"
+                )
+    print("")
+
     print("=== R31 QUESTIONS TO ANSWER ===")
     print("1. Is printer type 10 unused by all PRCOMS dispatch tables?")
     print("2. How is the printer-menu item count bounded?")
