@@ -11,6 +11,8 @@ from __future__ import annotations
 import pathlib
 import re
 
+from inspect_printshop_source import catalog
+
 from patch_printshop_source import (
     binary_source_info,
     binary_source_text,
