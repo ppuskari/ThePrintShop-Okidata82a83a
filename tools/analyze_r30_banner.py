@@ -182,12 +182,12 @@ def main() -> int:
     print("")
     print("=== R30 BYTE BUDGET BEFORE SOURCE RECLAIM ===")
     print(
-        "BSTR6 fixed hook site: 7 bytes. R29 text enters only the final "
-        "4 bytes of the shared helper ($7BF8-$7BFB)."
+        "BSTR6 fixed hook site: 7 bytes are truly text-local."
     )
     print(
-        "Therefore text-only logic has 11 directly replaceable bytes while "
-        "the known-good R29 icon entry at $7BF4 remains byte-for-byte frozen."
+        "The 8-byte EOF helper ($7BF4-$7BFB) is shared: icon enters at "
+        "$7BF4 and text enters at $7BF8. Those bytes may be redesigned only "
+        "if the hardware-good R29 icon mapping remains semantically identical."
     )
     print(
         "Historical BSTR2 spacing setup is another 7-byte site "
@@ -196,10 +196,12 @@ def main() -> int:
         "initialization/trampoline logic without shifting addresses."
     )
     print(
-        "Practical option-2 fit threshold: direct replay should require only "
-        "an existing row-output entry plus compact feed/selection logic. If "
-        "the row must be rebuilt or font shift state restored, 18 fragmented "
-        "bytes will not be enough and we must find another dead region."
+        "Practical option-2 fit threshold: there are 7 text-local bytes, "
+        "8 constrained shared-helper bytes, and potentially 7 BSTR2 bytes. "
+        "That is at most 22 fragmented bytes, but the shared eight must still "
+        "preserve the R29 icon result. If row replay needs only an existing "
+        "output entry plus compact feed/selection logic, this may fit. If the "
+        "row must be rebuilt or font shift state restored, it will not."
     )
     print("")
 
