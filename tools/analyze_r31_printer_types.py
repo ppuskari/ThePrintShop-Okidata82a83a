@@ -136,6 +136,12 @@ def main() -> int:
         print(f"{n + 1:5d}: {ml[n]}")
 
     print("")
+    print("=== BDRAW ICON SEND / RECLAIM AUDIT ===")
+    bd = binary_source_text(d2, "BDRAW.S").splitlines()
+    for n in range(448, min(535, len(bd) + 1)):
+        print(f"{n:5d}: {bd[n - 1]}")
+    print("")
+
     print("=== CRLF CALL-SITE TUPLE AUDIT ===")
     for disk_index, img in enumerate((d1, d2), start=1):
         for entry in catalog(img):
