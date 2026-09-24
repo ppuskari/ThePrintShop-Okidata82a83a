@@ -136,6 +136,12 @@ def main() -> int:
         print(f"{n + 1:5d}: {ml[n]}")
 
     print("")
+    print("=== GCDRAW SR MOVEMENT / DUMP AUDIT ===")
+    gd = binary_source_text(d2, "GCDRAW.S").splitlines()
+    for n in range(1320, min(1475, len(gd) + 1)):
+        print(f"{n:5d}: {gd[n - 1]}")
+    print("")
+
     print("=== BDRAW ICON SEND / RECLAIM AUDIT ===")
     bd = binary_source_text(d2, "BDRAW.S").splitlines()
     for n in range(448, min(535, len(bd) + 1)):
