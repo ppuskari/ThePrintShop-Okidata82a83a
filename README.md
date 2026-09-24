@@ -5,7 +5,10 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**R21 greeting cards, R26 signs, and R27 stationery are hardware-golden; R29 isolates banner text/icon geometry fixes inside DRAW4.**
+**Current prerelease: R30 hardware-golden on physical OkiGraph I hardware. R21 greeting cards, R26 signs, R27 stationery, and R30 banners are validated.**
+
+
+Reproducible prerelease details, frozen hashes, and rebuild instructions are in [PRERELEASE.md](PRERELEASE.md).
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
