@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from driver_model import (  # noqa: E402
     banner_icon_x,
-    banner_text_x,
+    banner_text_duplicate,
     crlf_type5,
     encode_columns,
     encode_pair,
@@ -61,17 +61,28 @@ class DriverModelTests(unittest.TestCase):
         self.assertFalse(state)
         self.assertNotIn(0x0A, stream)
 
-    def test_r29_banner_text_bitcnt_state_and_ratio(self):
-        xs = [banner_text_x(bitcnt) for bitcnt in range(8, 0, -1)]
-        self.assertEqual(xs, [7, 6, 5, 4, 3, 2, 1, 0])
+    def test_r30_banner_text_true_row_schedule(self):
+        duplicate_positions = []
+        for saddr in range(4):
+            for bitcnt in range(8, 0, -1):
+                if banner_text_duplicate(bitcnt, saddr):
+                    duplicate_positions.append((saddr, bitcnt))
 
-        # Under the frozen R27 type-5 CRLF semantics:
-        # six nonzero/non-2 values -> one 24/144 text LF each,
-        # X=2 -> zero-feed overstrike,
-        # X=0 -> one native 15/144 graphics feed.
-        total_144 = 6 * 24 + 15
-        self.assertEqual(total_144, 159)
-        self.assertEqual(8 * 20, 160)
+        self.assertEqual(
+            duplicate_positions,
+            [
+                (0, 8), (0, 5), (0, 2),
+                (1, 8), (1, 5), (1, 2),
+                (2, 8), (2, 5),
+                (3, 8), (3, 5), (3, 2),
+            ],
+        )
+        self.assertEqual(len(duplicate_positions), 11)
+
+        # 32 source rows become 43 physical rows. Native OkiGraph movement:
+        # 43 * 15/144 versus historical 32 * 20/144 = +0.78125%.
+        self.assertEqual(43 * 15, 645)
+        self.assertEqual(32 * 20, 640)
 
     def test_r29_banner_icon_xcur_state_and_ratio(self):
         xs = [banner_icon_x(i) for i in range(88)]
