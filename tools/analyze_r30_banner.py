@@ -180,6 +180,29 @@ def main() -> int:
         print("No SENDGC found before BSTR6; direct replay is not established.")
 
     print("")
+    print("=== R30 BYTE BUDGET BEFORE SOURCE RECLAIM ===")
+    print(
+        "BSTR6 fixed hook site: 7 bytes. R29 text enters only the final "
+        "4 bytes of the shared helper ($7BF8-$7BFB)."
+    )
+    print(
+        "Therefore text-only logic has 11 directly replaceable bytes while "
+        "the known-good R29 icon entry at $7BF4 remains byte-for-byte frozen."
+    )
+    print(
+        "Historical BSTR2 spacing setup is another 7-byte site "
+        "(LDX #10 / LDY #0 / JSR CRLF). If the source flow proves that setup "
+        "is obsolete under native-feed row replay, those bytes can host "
+        "initialization/trampoline logic without shifting addresses."
+    )
+    print(
+        "Practical option-2 fit threshold: direct replay should require only "
+        "an existing row-output entry plus compact feed/selection logic. If "
+        "the row must be rebuilt or font shift state restored, 18 fragmented "
+        "bytes will not be enough and we must find another dead region."
+    )
+    print("")
+
     print("=== R29 FIXED RUNTIME CONTRACT ===")
     print("DRAW4 load          $7800")
     print("historical payload  1012 bytes ($7800-$7BF3)")
