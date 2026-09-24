@@ -24,6 +24,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Analyze R30 banner text fit
+        shell: powershell
+        run: py -3 tools\analyze_r30_banner.py
       - name: Build runnable disk
         shell: powershell
         run: .\scripts\Build-RuntimeDisk.ps1
