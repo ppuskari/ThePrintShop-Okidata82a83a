@@ -62,6 +62,11 @@ def main() -> int:
         print(f"{n:5d}: {ml[n - 1]}")
     print("")
 
+    print("=== PRCOMS SYMBOL / ZERO-PAGE MAP ===")
+    for n in range(1, min(120, len(pl) + 1)):
+        print(f"{n:5d}: {pl[n - 1]}")
+    print("")
+
     print("=== EXACT PRCOMS CORE BLOCKS ===")
     for lo, hi in ((120, 245), (330, 455), (465, 510)):
         print(f"-- PRCOMS lines {lo}-{hi} --")
