@@ -58,7 +58,10 @@ def crlf_type5(
     """Model the compact PRCOMS type-5 CR/LF path used by R8.
 
     Active graphics with X=0,Y>0 uses native OkiGraph feed+CR and remains
-    in graphics. Other calls exit graphics first, then emit text-mode CR.
+    in graphics. R27 also recognizes the stationery MOV575 X=40,Y=14 call
+    while graphics is active and substitutes 68 native graphics feeds. This
+    replaces the 14 ordinary text LFs that call produced after SETLF5 was
+    disabled. Other calls exit graphics first, then emit text-mode CR.
     Print Shop's X=2 LF36 helper is suppressed; other requested text-mode
     feeds use ordinary LF. The invalid legacy ESC % 9 sequence is never sent.
     """
@@ -66,6 +69,11 @@ def crlf_type5(
         raise ValueError("X and Y must be non-negative")
 
     out = bytearray()
+
+    if in_graphics and x_72 == 40:
+        for _ in range(68):
+            out += bytes([ETX, GRAPHICS_LF_CR])
+        return bytes(out), True
 
     if in_graphics and x_72 == 0 and y_count > 0:
         for _ in range(y_count):
@@ -140,3 +148,33 @@ def r9_card_band_starts() -> list[int]:
         rowcnt -= 1
         starts.append(source)
     return starts
+
+
+
+def banner_text_duplicate(bitcnt: int, saddr: int) -> bool:
+    """R30 true-row duplicate schedule for OkiGraph banner text.
+
+    BITCNT counts 8..1 within each font byte. Rows 8 and 5 are duplicated in
+    every group. Row 2 is duplicated except in SADDR groups congruent to 2
+    modulo 4. Four complete groups therefore schedule 11 duplicate rows:
+    32 source rows -> 43 physical rows, close to the ideal 42 2/3.
+    """
+    if not 1 <= bitcnt <= 8:
+        raise ValueError("BITCNT must be in 1..8")
+    if saddr < 0:
+        raise ValueError("SADDR must be non-negative")
+    if bitcnt in (8, 5):
+        return True
+    return bitcnt == 2 and (saddr & 3) != 2
+
+
+def banner_icon_x(xcur: int) -> int:
+    """R29 banner-icon X value derived from Print Shop XCUR.
+
+    Every eighth source slice uses X=2 (zero-feed overstrike); the other
+    seven use X=0 (one native 15/144-inch OkiGraph feed).
+    """
+    if xcur < 0:
+        raise ValueError("banner XCUR must be non-negative")
+    return 2 if (xcur & 7) == 0 else 0
+

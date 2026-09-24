@@ -6,6 +6,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from driver_model import (  # noqa: E402
+    banner_icon_x,
+    banner_text_duplicate,
     crlf_type5,
     encode_columns,
     encode_pair,
@@ -59,6 +61,67 @@ class DriverModelTests(unittest.TestCase):
         self.assertFalse(state)
         self.assertNotIn(0x0A, stream)
 
+    def test_r30_banner_text_true_row_schedule(self):
+        duplicate_positions = []
+        for saddr in range(4):
+            for bitcnt in range(8, 0, -1):
+                if banner_text_duplicate(bitcnt, saddr):
+                    duplicate_positions.append((saddr, bitcnt))
+
+        self.assertEqual(
+            duplicate_positions,
+            [
+                (0, 8), (0, 5), (0, 2),
+                (1, 8), (1, 5), (1, 2),
+                (2, 8), (2, 5),
+                (3, 8), (3, 5), (3, 2),
+            ],
+        )
+        self.assertEqual(len(duplicate_positions), 11)
+
+        # 32 source rows become 43 physical rows. Native OkiGraph movement:
+        # 43 * 15/144 versus historical 32 * 20/144 = +0.78125%.
+        self.assertEqual(43 * 15, 645)
+        self.assertEqual(32 * 20, 640)
+
+    def test_r29_banner_icon_xcur_state_and_ratio(self):
+        xs = [banner_icon_x(i) for i in range(88)]
+        merges = [i for i, x in enumerate(xs) if x == 2]
+        self.assertEqual(
+            merges,
+            [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80],
+        )
+        self.assertEqual(xs.count(0), 77)
+        self.assertEqual(xs.count(2), 11)
+
+        # 77 native feeds vs historical 88 * 13/144 target.
+        self.assertEqual(xs.count(0) * 15, 1155)
+        self.assertEqual(88 * 13, 1144)
+
+    def test_r27_stationery_mov575_uses_native_feeds(self):
+        stream1, state = crlf_type5(
+            in_graphics=True, x_72=40, y_count=14
+        )
+        self.assertTrue(state)
+        self.assertEqual(stream1, b"\x03\x0e" * 68)
+
+        stream2, state = crlf_type5(
+            in_graphics=state, x_72=8, y_count=1
+        )
+        self.assertFalse(state)
+        self.assertEqual(stream2, b"\x03\x02\x0d\x0a")
+
+        stream3, state = crlf_type5(
+            in_graphics=state, x_72=7, y_count=1
+        )
+        self.assertFalse(state)
+        self.assertEqual(stream3, b"\x0d\x0a")
+
+        whole = stream1 + stream2 + stream3
+        self.assertEqual(whole.count(b"\x0e"), 68)
+        self.assertEqual(whole.count(b"\x0a"), 2)
+        self.assertNotIn(b"%9", whole)
+
     def test_first_outside_piece_has_no_vertical_feed(self):
         stream, state = gcdraw_piece_start(
             in_graphics=False,
@@ -84,6 +147,7 @@ class DriverModelTests(unittest.TestCase):
             crlf_type5(in_graphics=False, x_72=7, y_count=0)[0],
             crlf_type5(in_graphics=True, x_72=0, y_count=1)[0],
             crlf_type5(in_graphics=True, x_72=12, y_count=1)[0],
+            crlf_type5(in_graphics=True, x_72=40, y_count=14)[0],
             crlf_type5(in_graphics=True, x_72=2, y_count=1)[0],
             gcdraw_piece_start(
                 in_graphics=False, first_outside_piece=True

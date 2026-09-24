@@ -9,16 +9,17 @@ import pathlib
 
 EXPECTED = {
     "PRCOMS.ORIG": (1962, "6fb3928799f085967822362a3e7ba0b88dadd21e7e33372951e5734578c4629a"),
-    "PRCOMS.OKI":  (2039, "7c6072a2186d09fb911eaf16abccc0cf3238ef8aa2e9f2575f167050f4a61137"),
+    "PRCOMS.OKI":  (2043, "f0763857572ee113b2806fd0262d2f38b83d9f58571fa721a83867aad00d46a5"),
     "MENUS7.ORIG": (3014, "86d7fa76bfd693d461aa9085e3612253837e7f5f02a6027581beef3284c5355f"),
     "MENUS7.OKI":  (3018, "1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485"),
     "GCDRAW.ORIG": (2737, "cfa548eb4f950156c14639372f2681edbaa810e86f0945d73c24e0304e436353"),
-    "GCDRAW.OKI":  (2812, "2c37296b3e8d4bdad9170c0b56be91cc29925a9089e975d406efb2e9643e8bf9"),
+    "GCDRAW.OKI":  (2810, "4bd76c9d9fbe1a32870b00edc3ca54061037dc6cd4491eb8202b5e7f26c9db4a"),
 }
 
 
 def digest(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
 
 
 def main() -> int:

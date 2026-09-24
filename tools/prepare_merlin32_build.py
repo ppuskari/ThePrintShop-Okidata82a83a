@@ -51,9 +51,11 @@ def main() -> int:
 
     d1 = load_image(None, 0)
     d2 = load_image(None, 1)
+
     prcoms_orig = binary_source_text(d1, "PRCOMS.S")
     menus7_orig = binary_source_text(d2, "MENUS7.S")
     gcdraw_orig = binary_source_text(d2, "GCDRAW.S")
+
     prcoms_oki = patch_prcoms(prcoms_orig)
     menus7_oki = patch_menus(menus7_orig)
     gcdraw_oki = patch_gcdraw(gcdraw_orig)
