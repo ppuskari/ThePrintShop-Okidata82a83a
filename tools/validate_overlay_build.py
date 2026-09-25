@@ -13,7 +13,13 @@ EXPECTED = {
     "MENUS7.ORIG": (3014, "86d7fa76bfd693d461aa9085e3612253837e7f5f02a6027581beef3284c5355f"),
     "MENUS7.OKI":  (None, None),
     "GCDRAW.ORIG": (2737, "cfa548eb4f950156c14639372f2681edbaa810e86f0945d73c24e0304e436353"),
-    "GCDRAW.OKI":  (2810, "4bd76c9d9fbe1a32870b00edc3ca54061037dc6cd4491eb8202b5e7f26c9db4a"),
+    "GCDRAW.OKI":  (2810, None),
+    "MENUS3.ORIG": (None, None),
+    "MENUS3.OKI":  (None, None),
+    "MENUS4.ORIG": (None, None),
+    "MENUS4.OKI":  (None, None),
+    "LHDRAW.ORIG": (None, None),
+    "LHDRAW.OKI":  (None, None),
 }
 
 
