@@ -10,6 +10,13 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 Reproducible prerelease details, frozen hashes, and rebuild instructions are in [PRERELEASE.md](PRERELEASE.md).
 
+**R31 hardware-test candidate:** the stock `OKIDATA MICROLINE 92,93`
+selection is restored as printer type 5, while
+`OKI 82A/83A OKIGRAPH I` is a new printer type 10. R31 is reproducible
+and CI-green but is **not yet hardware-golden**. See
+[R31-HARDWARE-TEST.md](R31-HARDWARE-TEST.md) for the exact split,
+filesystem allocation proof, hashes, and physical test sequence.
+
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
 starting point for the 82A/83A OkiGraph I driver because it already:
@@ -21,8 +28,10 @@ starting point for the 82A/83A OkiGraph I driver because it already:
 - leaves graphics with `$03 $02`; and
 - uses Okidata `ESC % 9 n` programmable line spacing.
 
-The v0.1 driver deliberately repurposes that printer type instead of adding
-a tenth selector immediately.
+The early v0.1 through R30 driver deliberately repurposed that printer type
+while the OkiGraph geometry was being proven on hardware. R31 completes the
+planned split: the historical 92/93 entry is restored as type 5 and the
+OkiGraph 82A/83A driver becomes type 10.
 
 The hardware-good R11 graphics-byte conversion is:
 
