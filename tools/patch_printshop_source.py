@@ -462,16 +462,25 @@ def patch_gcdraw(text: str) -> str:
 
 R31_LHMENU_LOAD_OLD = """PRINT1 JSR PSDID
  LDX #DRAW3
- LDY #>DRAW3"""
+ LDY #>DRAW3
+ JSR BLOAD
+ BNE PRINT1"""
 
 R31_LHMENU_LOAD_NEW = """PRINT1 JSR PSDID
+ LDX #DRAW3
+ LDY #>DRAW3
+ JSR BLOAD
+ BNE PRINT1
  LDA $95F1
  CMP #10
  BNE R31D3
- LDA #$37
- STA DRAW3+4
-R31D3 LDX #DRAW3
- LDY #>DRAW3"""
+ LDA #00
+ STA $7EE5
+ LDA #$44
+ STA $7EE7
+R31D3"""
+
+
 
 R31_BMENU_LOAD_OLD = """ JSR PSDID
  LDX #DRAW4
@@ -498,12 +507,12 @@ R31_LHDRAW_PAGE_NEW = """MOV575 LDX #00
 
 
 def patch_lhmenus(text: str) -> str:
-    """Route letterhead/stationery to DRAW7 only for OkiGraph type 10."""
+    """Patch two loaded DRAW3 immediates only for OkiGraph type 10."""
     return replace_once(
         text,
         R31_LHMENU_LOAD_OLD,
         R31_LHMENU_LOAD_NEW,
-        "LHMENUS.S type-10 DRAW7 selector",
+        "LHMENUS.S type-10 DRAW3 in-memory geometry patch",
     )
 
 
