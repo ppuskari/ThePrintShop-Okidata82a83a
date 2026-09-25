@@ -53,6 +53,7 @@ def show_labels_containing(lines: list[str], token: str) -> None:
 def main() -> int:
     d1 = load_image(None, 0)
     d2 = load_image(None, 1)
+    d3 = load_image(None, 2)
     pr = binary_source_text(d1, "PRCOMS.S")
     menus = binary_source_text(d2, "MENUS7.S")
 
@@ -149,7 +150,7 @@ def main() -> int:
     print("")
 
     print("=== CRLF CALL-SITE TUPLE AUDIT ===")
-    for disk_index, img in enumerate((d1, d2), start=1):
+    for disk_index, img in enumerate((d1, d2, d3), start=1):
         for entry in catalog(img):
             name = entry["name"]
             if not name.endswith(".S"):
@@ -179,7 +180,7 @@ def main() -> int:
             f"ASC 'DRAW{n}" in compact
             for n in range(1, 5)
         )
-    for disk_index, img in enumerate((d1, d2), start=1):
+    for disk_index, img in enumerate((d1, d2, d3), start=1):
         for entry in catalog(img):
             name = entry["name"]
             if not name.endswith(".S"):
@@ -201,7 +202,7 @@ def main() -> int:
     print("")
 
     print("=== DRAW STRING / DYNAMIC LOADER AUDIT ===")
-    for disk_index, img in enumerate((d1, d2), start=1):
+    for disk_index, img in enumerate((d1, d2, d3), start=1):
         for entry in catalog(img):
             name = entry["name"]
             if not name.endswith(".S"):
@@ -237,7 +238,7 @@ def main() -> int:
 
     print("=== DRAW OVERLAY LOADER AUDIT ===")
     overlay_terms = ("DRAW1", "DRAW2", "DRAW3", "DRAW4", "BLOAD", "DRAW")
-    for disk_index, img in enumerate((d1, d2), start=1):
+    for disk_index, img in enumerate((d1, d2, d3), start=1):
         for entry in catalog(img):
             name = entry["name"]
             if not name.endswith(".S"):
@@ -269,7 +270,7 @@ def main() -> int:
         "CONFIG + 6", "PISLOT + 6",
     )
     total_hits = 0
-    for disk_index, img in enumerate((d1, d2), start=1):
+    for disk_index, img in enumerate((d1, d2, d3), start=1):
         for entry in catalog(img):
             name = entry["name"]
             if not name.endswith(".S"):
