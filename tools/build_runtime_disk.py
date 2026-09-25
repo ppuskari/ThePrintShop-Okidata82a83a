@@ -239,6 +239,136 @@ def _find_free_sector(img: bytes) -> tuple[int, int]:
     raise RuntimeError("no free DOS sector available for DRAW4 growth")
 
 
+R31_RECLAIM_SECTORS = (
+    tuple((34, sec) for sec in range(16))
+    + ((32, 10),)
+)
+
+
+def _deleted_mainmenu_track(img: bytes) -> int | None:
+    """Return DOS's saved T/S track for the deleted MAINMENU entry."""
+    vtoc = sector(img, 17, 0)
+    trk, sec = vtoc[1], vtoc[2]
+    seen: set[tuple[int, int]] = set()
+    found: list[int] = []
+
+    while trk:
+        key = (trk, sec)
+        if key in seen:
+            raise RuntimeError("catalog loop in deleted MAINMENU audit")
+        seen.add(key)
+        cat = sector(img, trk, sec)
+        next_trk, next_sec = cat[1], cat[2]
+
+        for off in range(0x0B, 0x100 - 34, 35):
+            ent = cat[off:off + 35]
+            if ent[0] != 0xFF:
+                continue
+            raw_name = bytes(b & 0x7F for b in ent[3:33])
+            display = "".join(
+                chr(b) if 32 <= b < 127 else " "
+                for b in raw_name
+            ).strip()
+            if display.startswith("MAINMENU"):
+                found.append(ent[32] & 0x7F)
+
+        trk, sec = next_trk, next_sec
+
+    if len(found) != 1:
+        raise RuntimeError(
+            "R31 reclaim: expected one deleted MAINMENU catalog entry, "
+            f"found {len(found)}"
+        )
+    return found[0]
+
+
+def reclaim_r31_overlay_sectors(img: bytes) -> bytes:
+    """Expose exactly 17 proven-stale sectors for DRAW6/DRAW8 allocation.
+
+    The production disk has no VTOC-free sectors, but it contains two
+    independently provable stale regions:
+
+    * Track 34 is an exact sector-for-sector duplicate of live track 16.
+      None of its 16 sectors is referenced by any live catalog file.
+    * T32/S10 is the T/S-list sector for the single deleted MAINMENU entry.
+      Its pairs are the stale T32/S09..S02 chain and it is unreferenced.
+
+    DRAW6 needs 12 sectors (one T/S + eleven data) and DRAW8 needs five
+    (one T/S + four data), so these 17 sectors are an exact deterministic
+    reclaim pool. The normal allocator immediately consumes all of them.
+    """
+    referenced = _referenced_sectors(img)
+    pool = list(R31_RECLAIM_SECTORS)
+
+    # Track 34 must remain a byte-for-byte stale duplicate of track 16.
+    for sec in range(SECTORS):
+        t34 = sector(img, 34, sec)
+        t16 = sector(img, 16, sec)
+        if t34 != t16:
+            raise RuntimeError(
+                f"R31 reclaim: T34/S{sec:02d} no longer matches "
+                f"T16/S{sec:02d}"
+            )
+
+    # None of the proposed sectors may be live or already marked free.
+    for trk, sec in pool:
+        if (trk, sec) in referenced:
+            raise RuntimeError(
+                f"R31 reclaim: T{trk:02d}/S{sec:02d} is live"
+            )
+        if _vtoc_sector_is_free(img, trk, sec):
+            raise RuntimeError(
+                f"R31 reclaim: T{trk:02d}/S{sec:02d} unexpectedly "
+                "already free"
+            )
+
+    # Prove the deleted MAINMENU provenance for T32/S10.
+    if _deleted_mainmenu_track(img) != 32:
+        raise RuntimeError(
+            "R31 reclaim: deleted MAINMENU no longer points at track 32"
+        )
+    ts = sector(img, 32, 10)
+    if ts[1] != 0 or ts[2] != 0:
+        raise RuntimeError("R31 reclaim: T32/S10 unexpectedly chains onward")
+    if (ts[5] | (ts[6] << 8)) != 0:
+        raise RuntimeError(
+            "R31 reclaim: T32/S10 has nonzero file-sector offset"
+        )
+    pairs: list[tuple[int, int]] = []
+    for off in range(0x0C, 0x100, 2):
+        trk, sec = ts[off], ts[off + 1]
+        if trk == 0:
+            break
+        pairs.append((trk, sec))
+    expected_pairs = [(32, sec) for sec in range(9, 1, -1)]
+    if pairs != expected_pairs:
+        raise RuntimeError(
+            "R31 reclaim: deleted MAINMENU T/S list changed; "
+            f"expected {expected_pairs}, got {pairs}"
+        )
+
+    out = bytearray(img)
+    for trk, sec in pool:
+        vtoc_off, mask = _vtoc_bitmap_offset(trk, sec)
+        out[vtoc_off] |= mask
+
+    result = bytes(out)
+    free_now = [
+        (trk, sec)
+        for trk, sec in pool
+        if _vtoc_sector_is_free(result, trk, sec)
+    ]
+    if free_now != pool:
+        raise RuntimeError("R31 reclaim: failed to expose exact sector pool")
+
+    print(
+        "  R31 stale-sector reclaim: PASS "
+        "T34/S00-S15 duplicate T16; T32/S10 deleted MAINMENU T/S; "
+        "17 sectors exposed"
+    )
+    return result
+
+
 def _allocate_sector(img: bytes) -> tuple[bytes, tuple[int, int]]:
     """Allocate and clear one DOS 3.3 sector, updating only the VTOC bitmap."""
     trk, sec = _find_free_sector(img)
@@ -1302,6 +1432,9 @@ def main() -> int:
     print("Installing R31 cards/signs dispatch without growing MENUS1...")
     img, draw1 = patch_draw1_dispatch(img)
 
+    print("Reclaiming proven-stale sectors for split overlays...")
+    img = reclaim_r31_overlay_sectors(img)
+
     print("Adding type-10 OkiGraph alternate overlays...")
     img = add_dos_binary(
         img, "DRAW6", gcdraw, load=0x7800, template_name="DRAW1"
@@ -1309,6 +1442,33 @@ def main() -> int:
     draw8 = build_banner_draw8_payload(img)
     img = add_dos_binary(
         img, "DRAW8", draw8, load=0x7800, template_name="DRAW4"
+    )
+
+    # The 17-sector reclaim pool must be consumed exactly: no new free-space
+    # side effect and no allocator drift into unrelated sectors.
+    pool = set(R31_RECLAIM_SECTORS)
+    draw6_entry = find_entry(img, "DRAW6")
+    draw8_entry = find_entry(img, "DRAW8")
+    consumed = set(_ts_list_sectors(img, draw6_entry))
+    consumed.update(file_sector_locations(img, draw6_entry))
+    consumed.update(_ts_list_sectors(img, draw8_entry))
+    consumed.update(file_sector_locations(img, draw8_entry))
+    if consumed != pool:
+        raise RuntimeError(
+            "R31 overlay allocation escaped deterministic reclaim pool: "
+            f"expected {sorted(pool)}, got {sorted(consumed)}"
+        )
+    still_free = [
+        loc for loc in sorted(pool)
+        if _vtoc_sector_is_free(img, *loc)
+    ]
+    if still_free:
+        raise RuntimeError(
+            f"R31 reclaim left pool sectors free: {still_free}"
+        )
+    print(
+        "  R31 overlay allocation contract: PASS "
+        "DRAW6 + DRAW8 consume all 17 reclaimed sectors exactly"
     )
 
     print("Applying R14 paper-position patch without growing SYSLIB...")
