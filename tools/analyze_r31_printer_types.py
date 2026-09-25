@@ -172,6 +172,34 @@ def main() -> int:
                 )
     print("")
 
+    print("=== DRAW OVERLAY LOADER AUDIT ===")
+    overlay_terms = ("DRAW1", "DRAW2", "DRAW3", "DRAW4", "BLOAD", "DRAW")
+    for disk_index, img in enumerate((d1, d2), start=1):
+        for entry in catalog(img):
+            name = entry["name"]
+            if not name.endswith(".S"):
+                continue
+            try:
+                src = binary_source_text(img, name)
+            except Exception:
+                continue
+            sl = src.splitlines()
+            for i, line in enumerate(sl):
+                u = line.upper()
+                if not any(term in u for term in overlay_terms):
+                    continue
+                if "DRAW" not in u and "BLOAD" not in u:
+                    continue
+                lo = max(0, i - 5)
+                hi = min(len(sl), i + 8)
+                print(
+                    f"-- disk{disk_index} {name} around line {i + 1} --"
+                )
+                for n in range(lo, hi):
+                    print(f"{n + 1:5d}: {sl[n]}")
+                print("")
+    print("")
+
     print("=== CONFIG+6 / $95F6 UNUSED-BYTE AUDIT ===")
     config_patterns = (
         "$95F6", "$95f6", "CONFIG+6", "PISLOT+6",
