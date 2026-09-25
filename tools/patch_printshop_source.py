@@ -37,7 +37,7 @@ from inspect_printshop_source import (
 )
 
 OLD_MENU = "OKIDATA MICROLINE 92,93"
-NEW_MENU = "OKI 82A/83A OKIGRAPH I "
+NEW_MENU = "OKI 82A/83A OKIGRAPH I"
 
 # Keep the replacement machine-code length equal to the original.
 #
@@ -70,7 +70,10 @@ GC5_NEW = """GC5A PLA
  CMP #03
  BNE GC5B
  JSR COUTRAW
-GC5B PHA"""
+GC5B PHA
+ BIT FIX80
+ BMI GC5X"""
+
 
 
 CRLF_OLD = re.compile(
@@ -91,10 +94,14 @@ CRLF_OLD = re.compile(
     r"^SETLFX RTS$"
 )
 
-CRLF_NEW = """CRLF LDA PRTYPE
- CMP #05
- BEQ CRLF5
- LDA #$0D
+CRLF_NEW = """CRLF BIT FIX80
+ BPL CRLF0
+ CPX #00
+ BEQ CRLF10G
+ CPX #02
+ BNE CRLF0
+ LDY #00
+CRLF0 LDA #$0D
  JSR COUT1
  JSR SETLF
  DEY
@@ -103,47 +110,24 @@ CRLF2 LDA #$0A
  JSR COUT1
  DEY
  BPL CRLF2
- BMI CRLFX
-*
-* OKIGRAPH I TYPE-5 CR/LF - R8 PRCOMS CORE
-* Continuous graphics from R7; DUMP boundary handling is in GCDRAW.
-*
-CRLF5 LDA FIX80
- BEQ CRLF5T
- CPX #40
- BNE CRLF5N
- LDY #68
- BNE CRLF5G
-CRLF5N CPX #00
- BNE CRLF5E
- CPY #00
- BEQ CRLF5E
-CRLF5G LDA #03
- JSR COUTRAW
- LDA #$0E
- JSR COUTRAW
- DEY
- BNE CRLF5G
- JMP CRLFX
-CRLF5E LDA #$0D
- JSR COUT1
- JMP CRLF5D
-CRLF5T LDA #$0D
- JSR COUTRAW
-CRLF5D DEY
- BMI CRLFX
- CPX #02
- BEQ CRLFX
-CRLF5L LDA #$0A
- JSR COUTRAW
- DEY
- BPL CRLF5L
 CRLFX TXA
  PHA
  JSR UPLRK
  PLA
  TAX
-SETLFX RTS"""
+SETLFX RTS
+*
+* R31 TYPE-10 OKIGRAPH NATIVE GRAPHICS FEED.
+* FIX80=$FF MEANS TYPE-10 GRAPHICS IS ACTIVE.
+*
+CRLF10G LDA #03
+ JSR COUTRAW
+ LDA #$0E
+ JSR COUTRAW
+ DEY
+ BNE CRLF10G
+ BEQ CRLFX"""
+
 
 
 SGC5_OLD = re.compile(
@@ -159,12 +143,20 @@ SGC5_NEW = """SGC5 STX TEMPLO
  STY TEMPHI
  LDA #00
  STA GCINDEX
- LDA FIX80
- BNE SGC5X
- INC FIX80
+ LDA #03
+ JMP COUT1
+*
+* R31 TYPE-10 OKIGRAPH ENTRY. TYPE 5 ABOVE IS HISTORICAL 92/93.
+*
+SGC10 LDA #00
+ STA GCINDEX
+ BIT FIX80
+ BMI SGC10X
+ DEC FIX80
  LDA #03
  JMP COUTRAW
-SGC5X RTS"""
+SGC10X RTS"""
+
 
 GC5_END_OLD = re.compile(
     r"(?m)^[ \t]+LDA #03\n"
@@ -184,16 +176,13 @@ COUT1_OLD = re.compile(
 )
 
 COUT1_NEW = """COUT1 PHA
- LDA PRTYPE
- CMP #05
- BNE COUT1N
- LDA FIX80
- BEQ COUT1N
+ BIT FIX80
+ BPL COUT1N
  LDA #03
  JSR COUTRAW
  LDA #02
  JSR COUTRAW
- DEC FIX80
+ INC FIX80
 COUT1N PLA
 COUTRAW STX XTEMP
  STY YTEMP
@@ -201,14 +190,34 @@ COUTRAW STX XTEMP
 COUT1A LDX PITYPE
 """
 
-SETLF5_OLD = """SETLF5 LDA #'%'
- JSR COUT1
- LDA #'9'
- JSR COUT1
- TXA
- ASL
- JMP COUT1"""
-SETLF5_NEW = """SETLF5 RTS"""
+
+SETLF_PREAMBLE_OLD = """SETLF CPX #00
+ BEQ SETLFX
+ JSR ESCOUT
+ LDA PRTYPE
+ CMP #07"""
+
+SETLF_PREAMBLE_NEW = """SETLF CPX #00
+ BEQ SETLFX
+ LDA PRTYPE
+ CMP #10
+ BEQ SETLFX
+ PHA
+ JSR ESCOUT
+ PLA
+ CMP #07"""
+
+SENDGC_TAIL_OLD = """ CMP #09
+ BEQ SGC1
+*
+SGC7 JSR DIVSUB"""
+
+SENDGC_TAIL_NEW = """ CMP #09
+ BEQ SGC1
+ BCS SGC10
+*
+SGC7 JSR DIVSUB"""
+
 
 MENUS_INIT_OLD = """ JSR GSELECT
  STA PRTYPE
@@ -648,67 +657,96 @@ def replace_once(text: str, old: str, new: str, what: str) -> str:
 
 
 def patch_prcoms(text: str) -> str:
-    gc_matches = list(GC5_OLD.finditer(text))
-    if len(gc_matches) != 1:
-        raise RuntimeError(
-            "PRCOMS.S GC5 block: expected exactly one legacy type-5 block, "
-            f"found {len(gc_matches)}"
-        )
+    """R31 split: restore historical type 5 and add OkiGraph as type 10."""
+    checks = (
+        (GC5_OLD, "PRCOMS.S GC5 block"),
+        (CRLF_OLD, "PRCOMS.S CRLF block"),
+        (SGC5_OLD, "PRCOMS.S SGC5 block"),
+        (COUT1_OLD, "PRCOMS.S COUT1 block"),
+    )
+    for pattern, what in checks:
+        matches = list(pattern.finditer(text))
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"{what}: expected exactly one original block, "
+                f"found {len(matches)}"
+            )
 
-    crlf_matches = list(CRLF_OLD.finditer(text))
-    if len(crlf_matches) != 1:
-        raise RuntimeError(
-            "PRCOMS.S CRLF block: expected exactly one original block, "
-            f"found {len(crlf_matches)}"
-        )
+    for old, what in (
+        (SETLF_PREAMBLE_OLD, "PRCOMS.S SETLF preamble"),
+        (SENDGC_TAIL_OLD, "PRCOMS.S SENDGC type-10 dispatch site"),
+    ):
+        count = text.count(old)
+        if count != 1:
+            raise RuntimeError(
+                f"{what}: expected exactly one original block, found {count}"
+            )
 
-    sgc5_matches = list(SGC5_OLD.finditer(text))
-    if len(sgc5_matches) != 1:
+    gcout_old = """GCOUT1 PHA
+ LDA PRTYPE"""
+    gcout_new = """GCOUT1 PHA
+ BIT FIX80
+ BMI GC5
+ LDA PRTYPE"""
+    if text.count(gcout_old) != 1:
         raise RuntimeError(
-            "PRCOMS.S SGC5 block: expected exactly one original block, "
-            f"found {len(sgc5_matches)}"
-        )
-
-    gc5_end_matches = list(GC5_END_OLD.finditer(text))
-    if len(gc5_end_matches) != 1:
-        raise RuntimeError(
-            "PRCOMS.S GC5 end block: expected exactly one original block, "
-            f"found {len(gc5_end_matches)}"
-        )
-
-    cout1_matches = list(COUT1_OLD.finditer(text))
-    if len(cout1_matches) != 1:
-        raise RuntimeError(
-            "PRCOMS.S COUT1 block: expected exactly one original block, "
-            f"found {len(cout1_matches)}"
-        )
-
-    setlf5_count = text.count(SETLF5_OLD)
-    if setlf5_count != 1:
-        raise RuntimeError(
-            "PRCOMS.S SETLF5 block: expected exactly one original block, "
-            f"found {setlf5_count}"
+            "PRCOMS.S GCOUT1 entry: expected exactly one original block"
         )
 
     patched = CRLF_OLD.sub(CRLF_NEW, text, count=1)
     patched = SGC5_OLD.sub(SGC5_NEW, patched, count=1)
     patched = GC5_OLD.sub(GC5_NEW, patched, count=1)
-    patched = GC5_END_OLD.sub(GC5_END_NEW, patched, count=1)
     patched = COUT1_OLD.sub(COUT1_NEW, patched, count=1)
-    patched = patched.replace(SETLF5_OLD, SETLF5_NEW, 1)
+    patched = patched.replace(
+        SETLF_PREAMBLE_OLD,
+        SETLF_PREAMBLE_NEW,
+        1,
+    )
+    patched = patched.replace(
+        SENDGC_TAIL_OLD,
+        SENDGC_TAIL_NEW,
+        1,
+    )
+    patched = patched.replace(gcout_old, gcout_new, 1)
+
+    # R31 intentionally leaves the historical SETLF5 and GC5 close sequence
+    # untouched for stock Okidata Microline 92/93 (printer type 5).
+    if "SETLF5 LDA #'%'" not in patched:
+        raise RuntimeError("R31 lost historical SETLF5")
+    if GC5_END_OLD.search(patched) is None:
+        raise RuntimeError("R31 lost historical type-5 graphics close")
 
     return patched
 
 
 def patch_menus(text: str) -> str:
-    if len(OLD_MENU) != len(NEW_MENU):
-        raise AssertionError("menu replacement must remain length-preserving")
-    patched = replace_once(text, OLD_MENU, NEW_MENU, "MENUS7.S printer label")
+    """R31: retain stock 92/93 as item 5 and append OkiGraph as type 10."""
+    if text.count("PRMAX EQU 9") != 1:
+        raise RuntimeError("MENUS7.S: expected PRMAX EQU 9")
+    if text.count(OLD_MENU) != 1:
+        raise RuntimeError("MENUS7.S: stock Okidata 92/93 label missing")
+    if NEW_MENU in text:
+        raise RuntimeError("MENUS7.S: OkiGraph type-10 label already present")
+
+    tail_old = """ ASC 'CENTRONICS GLP, AXIOM SLP, OKI 292'
+ HEX 00FF"""
+    tail_new = f""" ASC 'CENTRONICS GLP, AXIOM SLP, OKI 292'
+ HEX 00
+ ASC '{NEW_MENU}'
+ HEX 00FF"""
+
+    patched = text.replace("PRMAX EQU 9", "PRMAX EQU 10", 1)
+    patched = replace_once(
+        patched,
+        tail_old,
+        tail_new,
+        "MENUS7.S printer-list tail",
+    )
     return replace_once(
         patched,
         MENUS_INIT_OLD,
         MENUS_INIT_NEW,
-        "MENUS7.S type-5 state initialization",
+        "MENUS7.S graphics-state initialization",
     )
 
 
