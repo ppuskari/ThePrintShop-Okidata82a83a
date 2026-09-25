@@ -604,6 +604,179 @@ def _find_unique_bytes(
     return hits[0]
 
 
+R31_GCDRAW_SHA256 = (
+    "be8bbee04098717019870a60b5f16f00"
+    "2427412e7399cadbcc179d7c0f7d34a7"
+)
+R31_MENUS3_SHA256 = (
+    "7b5ae3c771f69c20235a7914cb8bc271"
+    "5e5e1b23c0c8775549a9cfe145030814"
+)
+R31_MENUS4_SHA256 = (
+    "583764b31d2c27827fbd33abe075d77e"
+    "3436d495df7f1d8c5955ed40640adc6e"
+)
+R31_LHDRAW_ORIG_HEAD_SHA256 = (
+    "16d6264b3a6f815f4138677967b235b3"
+    "7582713ec5bcc2c23f39cbeb3082282f"
+)
+R31_LHDRAW_OKI_HEAD_SHA256 = (
+    "ee5dcf9ef4173dcc6afb8a118f95f451"
+    "cca4c4861888c536b7323afeb15e8b59"
+)
+R31_LHDRAW_HEAD_LENGTH = 1791
+
+
+def patch_draw1_dispatch(img: bytes) -> tuple[bytes, bytes]:
+    """Use DRAW1 EOF slack to tail-load DRAW6 only for printer type 10.
+
+    Non-type-10 execution pays only the dispatcher and then jumps to the
+    exact historical DRAW1 entry target.  Type 10 reuses MENUS1's existing
+    DRAW1,D1 filename buffer, changes only its digit to 6, and manually
+    supplies BLOAD's return address as $77FF so RTS lands at $7800 after
+    DRAW6 has overwritten the dispatcher itself.
+    """
+    load, payload = read_dos_binary(img, "DRAW1")
+    if load != 0x7800 or len(payload) != 2737:
+        raise RuntimeError("DRAW1: unexpected historical runtime shape")
+    if payload[0] != 0x4C:
+        raise RuntimeError("DRAW1: historical entry is not JMP absolute")
+    old_target = payload[1] | (payload[2] << 8)
+    if not (load <= old_target < load + len(payload)):
+        raise RuntimeError(
+            f"DRAW1: historical entry target 0x{old_target:04X} is outside file"
+        )
+
+    menu_load, menu = read_dos_binary(img, "MENUS1")
+    if menu_load != 0x4000:
+        raise RuntimeError("MENUS1: unexpected load address")
+    needle = b"DRAW1,D1"
+    hits = [
+        i for i in range(len(menu))
+        if menu.startswith(needle, i)
+    ]
+    if len(hits) != 1:
+        raise RuntimeError(
+            f"MENUS1: expected one DRAW1,D1 filename, found {len(hits)}"
+        )
+    filename_addr = menu_load + hits[0]
+    digit_addr = filename_addr + 4
+
+    stub_addr = load + len(payload)
+    stub = bytes([
+        0xAD, 0xF1, 0x95,             # LDA $95F1 / PRTYPE
+        0xC9, 0x0A,                   # CMP #10
+        0xF0, 0x03,                   # BEQ type10
+        0x4C, old_target & 0xFF, old_target >> 8,
+        0xA9, 0x36,                   # type10: LDA #'6'
+        0x8D, digit_addr & 0xFF, digit_addr >> 8,
+        0xA2, filename_addr & 0xFF,   # LDX #<DRAW1 filename
+        0xA0, filename_addr >> 8,     # LDY #>DRAW1 filename
+        0xA9, 0x77,                   # synthetic RTS target $77FF
+        0x48,
+        0xA9, 0xFF,
+        0x48,
+        0x4C, 0x09, 0x08,             # JMP BLOAD
+    ])
+    if len(stub) != 28:
+        raise AssertionError("R31 DRAW1 dispatcher must remain 28 bytes")
+
+    entry = find_entry(img, "DRAW1")
+    capacity = len(file_sector_locations(img, entry)) * SECTOR_SIZE - 4
+    if len(payload) + len(stub) > capacity:
+        raise RuntimeError(
+            f"DRAW1: dispatcher exceeds existing payload capacity {capacity}"
+        )
+    if load + len(payload) + len(stub) > DRAW_OVERLAY_LIMIT:
+        raise RuntimeError("DRAW1: dispatcher would cross $8300 overlay limit")
+
+    patched = bytearray(payload)
+    patched[0:3] = bytes([
+        0x4C, stub_addr & 0xFF, stub_addr >> 8
+    ])
+    patched += stub
+
+    if patched[3:len(payload)] != payload[3:]:
+        raise RuntimeError("DRAW1: historical body changed outside entry JMP")
+    if patched[len(payload):] != stub:
+        raise RuntimeError("DRAW1: dispatcher append mismatch")
+
+    out = rewrite_dos_binary(img, "DRAW1", bytes(patched))
+    check_load, check = read_dos_binary(out, "DRAW1")
+    if check_load != load or check != bytes(patched):
+        raise RuntimeError("DRAW1: dispatcher read-back failed")
+
+    print(
+        "  patched DRAW1 dispatcher: PASS "
+        f"old_entry=0x{old_target:04X} stub=0x{stub_addr:04X} "
+        f"MENUS1 filename=0x{filename_addr:04X} "
+        f"len={len(patched)}/{capacity}"
+    )
+    return out, bytes(patched)
+
+
+def build_stationery_draw7_payload(
+    img: bytes,
+    patched_head: bytes,
+) -> bytes:
+    """Rebuild DRAW7 as patched 1791-byte LHDRAW head + shipped tail."""
+    load, shipped = read_dos_binary(img, "DRAW3")
+    if load != 0x7800 or len(shipped) != 2811:
+        raise RuntimeError("DRAW3: unexpected shipped stationery overlay")
+    head = shipped[:R31_LHDRAW_HEAD_LENGTH]
+    if sha256(head) != R31_LHDRAW_ORIG_HEAD_SHA256:
+        raise RuntimeError(
+            "DRAW3: shipped prefix does not match historical LHDRAW source"
+        )
+    if len(patched_head) != R31_LHDRAW_HEAD_LENGTH:
+        raise RuntimeError(
+            f"LHDRAW.OKI: expected {R31_LHDRAW_HEAD_LENGTH} bytes, "
+            f"got {len(patched_head)}"
+        )
+    if sha256(patched_head) != R31_LHDRAW_OKI_HEAD_SHA256:
+        raise RuntimeError("LHDRAW.OKI: deterministic head hash mismatch")
+
+    diffs = [
+        (i, old, new)
+        for i, (old, new) in enumerate(zip(head, patched_head))
+        if old != new
+    ]
+    if len(diffs) != 2:
+        raise RuntimeError(
+            f"LHDRAW.OKI: expected two immediate-byte changes, got {len(diffs)}"
+        )
+    transitions = [(old, new) for _, old, new in diffs]
+    if transitions != [(40, 0), (14, 68)]:
+        raise RuntimeError(
+            "LHDRAW.OKI: expected only X=40->0 and Y=14->68; "
+            f"got {transitions}"
+        )
+
+    result = patched_head + shipped[R31_LHDRAW_HEAD_LENGTH:]
+    if len(result) != len(shipped):
+        raise RuntimeError("DRAW7: reconstruction changed runtime length")
+    print(
+        "  reconstructed DRAW7 stationery: PASS "
+        f"head={len(patched_head)} tail={len(shipped)-len(patched_head)} "
+        f"sha256={sha256(result)}"
+    )
+    return result
+
+
+def build_banner_draw8_payload(img: bytes) -> bytes:
+    """Build the hardware-golden R30 banner as a separate DRAW8 payload."""
+    load, payload = read_dos_binary(img, "DRAW4")
+    expect = EXPECTED_ORIGINAL["DRAW4"]
+    if load != expect["load"]:
+        raise RuntimeError("DRAW4: unexpected load address")
+    if len(payload) != expect["length"] or sha256(payload) != expect["sha256"]:
+        raise RuntimeError("DRAW4: shipped banner overlay mismatch")
+    patched, _ = patch_banner_draw4_payload(payload, load)
+    if sha256(patched) != R30_DRAW4_SHA256:
+        raise RuntimeError("DRAW8: R30 banner hash mismatch")
+    return patched
+
+
 def _build_r30_strsend(
     *,
     strsub_addr: int,
