@@ -627,6 +627,98 @@ R31_LHDRAW_OKI_HEAD_SHA256 = (
 R31_LHDRAW_HEAD_LENGTH = 1791
 
 
+def patch_menus3_stationery_wrapper(
+    img: bytes,
+) -> tuple[bytes, bytes]:
+    """Patch only MENUS3's BLOAD JSR target; append wrapper in EOF slack."""
+    load, payload = read_dos_binary(img, "MENUS3")
+    expect = EXPECTED_ORIGINAL["MENUS3"]
+    if load != expect["load"] or len(payload) != expect["length"]:
+        raise RuntimeError("MENUS3: unexpected historical runtime shape")
+    if sha256(payload) != expect["sha256"]:
+        raise RuntimeError("MENUS3: historical runtime hash mismatch")
+
+    name = b"DRAW3,D1"
+    name_hits = [
+        i for i in range(len(payload))
+        if payload.startswith(name, i)
+    ]
+    if len(name_hits) != 1:
+        raise RuntimeError(
+            f"MENUS3: expected one DRAW3,D1 string, found {len(name_hits)}"
+        )
+    name_addr = load + name_hits[0]
+
+    # Locate the unique LDX #<DRAW3 ; LDY #>DRAW3 ; JSR BLOAD sequence.
+    seq = bytes([
+        0xA2, name_addr & 0xFF,
+        0xA0, name_addr >> 8,
+        0x20, 0x09, 0x08,
+    ])
+    hits = [
+        i for i in range(len(payload) - len(seq) + 1)
+        if payload[i:i + len(seq)] == seq
+    ]
+    if len(hits) != 1:
+        raise RuntimeError(
+            f"MENUS3: expected one DRAW3 BLOAD sequence, found {len(hits)}"
+        )
+    seq_off = hits[0]
+    jsr_off = seq_off + 4
+    if payload[jsr_off:jsr_off + 3] != bytes([0x20, 0x09, 0x08]):
+        raise RuntimeError("MENUS3: BLOAD call bytes changed")
+
+    wrapper_addr = load + len(payload)
+    wrapper = bytes([
+        0x20, 0x09, 0x08,             # JSR BLOAD
+        0xD0, 0x13,                   # BNE fail/RTS
+        0xAD, 0xF1, 0x95,             # LDA $95F1 / PRTYPE
+        0xC9, 0x0A,                   # CMP #10
+        0xD0, 0x0C,                   # BNE success
+        0xA9, 0x00,                   # LDA #0
+        0x8D, 0xE5, 0x7E,             # STA $7EE5
+        0xA9, 0x44,                   # LDA #$44
+        0x8D, 0xE7, 0x7E,             # STA $7EE7
+        0xA9, 0x00,                   # success: LDA #0 => Z=1
+        0x60,                         # fail/success: RTS
+    ])
+    if len(wrapper) != 25:
+        raise AssertionError("MENUS3 stationery wrapper must remain 25 bytes")
+
+    entry = find_entry(img, "MENUS3")
+    capacity = len(file_sector_locations(img, entry)) * SECTOR_SIZE - 4
+    if len(payload) + len(wrapper) > capacity:
+        raise RuntimeError(
+            f"MENUS3: wrapper exceeds capacity {capacity}"
+        )
+
+    patched = bytearray(payload)
+    patched[jsr_off + 1] = wrapper_addr & 0xFF
+    patched[jsr_off + 2] = wrapper_addr >> 8
+    patched += wrapper
+
+    # Existing code is unchanged except the two-byte JSR operand.
+    changed = [
+        i for i, (a, b) in enumerate(zip(payload, patched[:len(payload)]))
+        if a != b
+    ]
+    if changed != [jsr_off + 1, jsr_off + 2]:
+        raise RuntimeError(
+            f"MENUS3: unexpected in-body changes {changed}"
+        )
+
+    out = rewrite_dos_binary(img, "MENUS3", bytes(patched))
+    check_load, check = read_dos_binary(out, "MENUS3")
+    if check_load != load or check != bytes(patched):
+        raise RuntimeError("MENUS3: wrapper read-back failed")
+    print(
+        "  patched MENUS3 stationery wrapper: PASS "
+        f"BLOAD JSR +0x{jsr_off:04X} -> 0x{wrapper_addr:04X}; "
+        f"RAM patches $7EE5/$7EE7; len={len(patched)}/{capacity}"
+    )
+    return out, bytes(patched)
+
+
 def patch_draw1_dispatch(img: bytes) -> tuple[bytes, bytes]:
     """Use DRAW1 EOF slack to tail-load DRAW6 only for printer type 10.
 
