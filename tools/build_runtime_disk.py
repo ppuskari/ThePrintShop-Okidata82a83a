@@ -208,6 +208,22 @@ def _vtoc_sector_is_free(img: bytes, track: int, sec: int) -> bool:
     return bool(img[off] & mask)
 
 
+def _catalog_sectors(img: bytes) -> list[tuple[int, int]]:
+    vtoc = sector(img, 17, 0)
+    trk, sec = vtoc[1], vtoc[2]
+    seen: set[tuple[int, int]] = set()
+    result: list[tuple[int, int]] = []
+    while trk:
+        key = (trk, sec)
+        if key in seen:
+            raise RuntimeError("catalog sector loop")
+        seen.add(key)
+        result.append(key)
+        cat = sector(img, trk, sec)
+        trk, sec = cat[1], cat[2]
+    return result
+
+
 def _referenced_sectors(img: bytes) -> set[tuple[int, int]]:
     used: set[tuple[int, int]] = set()
 
@@ -215,6 +231,8 @@ def _referenced_sectors(img: bytes) -> set[tuple[int, int]]:
     for trk in (0, 1, 2, 17):
         for sec in range(SECTORS):
             used.add((trk, sec))
+
+    used.update(_catalog_sectors(img))
 
     for entry in catalog(img):
         used.update(_ts_list_sectors(img, entry))
@@ -239,10 +257,12 @@ def _find_free_sector(img: bytes) -> tuple[int, int]:
     raise RuntimeError("no free DOS sector available for DRAW4 growth")
 
 
-R31_RECLAIM_SECTORS = (
+R31_CATALOG_SECTOR = (32, 9)
+R31_OVERLAY_SECTORS = (
     tuple((34, sec) for sec in range(16))
     + ((32, 10),)
 )
+R31_RECLAIM_SECTORS = R31_OVERLAY_SECTORS + (R31_CATALOG_SECTOR,)
 
 
 def _deleted_mainmenu_track(img: bytes) -> int | None:
@@ -294,8 +314,10 @@ def reclaim_r31_overlay_sectors(img: bytes) -> bytes:
       Its pairs are the stale T32/S09..S02 chain and it is unreferenced.
 
     DRAW6 needs 12 sectors (one T/S + eleven data) and DRAW8 needs five
-    (one T/S + four data), so these 17 sectors are an exact deterministic
-    reclaim pool. The normal allocator immediately consumes all of them.
+    (one T/S + four data). A second deleted MAINMENU data sector, T32/S09,
+    becomes one new catalog sector so both files can have directory entries.
+    The resulting reclaim set is exactly 18 sectors: 17 overlay sectors plus
+    one catalog sector.
     """
     referenced = _referenced_sectors(img)
     pool = list(R31_RECLAIM_SECTORS)
@@ -364,7 +386,49 @@ def reclaim_r31_overlay_sectors(img: bytes) -> bytes:
     print(
         "  R31 stale-sector reclaim: PASS "
         "T34/S00-S15 duplicate T16; T32/S10 deleted MAINMENU T/S; "
-        "17 sectors exposed"
+        "18 sectors exposed (17 overlay + 1 catalog)"
+    )
+    return result
+
+
+def extend_r31_catalog(img: bytes) -> bytes:
+    """Consume T32/S09 as a new final DOS catalog sector."""
+    cat_loc = R31_CATALOG_SECTOR
+    if not _vtoc_sector_is_free(img, *cat_loc):
+        raise RuntimeError(
+            "R31 catalog extension sector is not free after reclaim"
+        )
+
+    chain = _catalog_sectors(img)
+    if not chain:
+        raise RuntimeError("R31 catalog extension found empty catalog chain")
+    last_trk, last_sec = chain[-1]
+    last_off = _sector_offset(last_trk, last_sec)
+
+    out = bytearray(img)
+    # Link previous final catalog sector to the new one.
+    out[last_off + 1] = cat_loc[0]
+    out[last_off + 2] = cat_loc[1]
+
+    # Allocate and clear the new catalog sector. All-zero entry slots are free.
+    vtoc_off, mask = _vtoc_bitmap_offset(*cat_loc)
+    if not (out[vtoc_off] & mask):
+        raise RuntimeError("R31 catalog sector unexpectedly not VTOC-free")
+    out[vtoc_off] &= (~mask) & 0xFF
+    cat_off = _sector_offset(*cat_loc)
+    out[cat_off:cat_off + SECTOR_SIZE] = bytes(SECTOR_SIZE)
+
+    result = bytes(out)
+    new_chain = _catalog_sectors(result)
+    if new_chain != chain + [cat_loc]:
+        raise RuntimeError(
+            "R31 catalog extension chain mismatch: "
+            f"expected {chain + [cat_loc]}, got {new_chain}"
+        )
+    print(
+        "  R31 catalog extension: PASS "
+        f"T{last_trk:02d}/S{last_sec:02d} -> "
+        f"T{cat_loc[0]:02d}/S{cat_loc[1]:02d}"
     )
     return result
 
@@ -1423,6 +1487,7 @@ def main() -> int:
 
     print("Reclaiming proven-stale sectors from untouched base disk...")
     img = reclaim_r31_overlay_sectors(img)
+    img = extend_r31_catalog(img)
 
     print("Installing R31 resident and menu selectors...")
     img = rewrite_dos_binary(img, "PRCOMS", prcoms)
@@ -1446,7 +1511,12 @@ def main() -> int:
 
     # The 17-sector reclaim pool must be consumed exactly: no new free-space
     # side effect and no allocator drift into unrelated sectors.
-    pool = set(R31_RECLAIM_SECTORS)
+    pool = set(R31_OVERLAY_SECTORS)
+    if _vtoc_sector_is_free(img, *R31_CATALOG_SECTOR):
+        raise RuntimeError("R31 catalog sector became free after extension")
+    if R31_CATALOG_SECTOR not in set(_catalog_sectors(img)):
+        raise RuntimeError("R31 catalog sector is not in live catalog chain")
+
     draw6_entry = find_entry(img, "DRAW6")
     draw8_entry = find_entry(img, "DRAW8")
     consumed = set(_ts_list_sectors(img, draw6_entry))
@@ -1468,7 +1538,8 @@ def main() -> int:
         )
     print(
         "  R31 overlay allocation contract: PASS "
-        "DRAW6 + DRAW8 consume all 17 reclaimed sectors exactly"
+        "DRAW6 + DRAW8 consume all 17 overlay sectors exactly; "
+        "T32/S09 remains the live added catalog sector"
     )
 
     print("Applying R14 paper-position patch without growing SYSLIB...")
