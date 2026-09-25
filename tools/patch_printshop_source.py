@@ -686,8 +686,9 @@ def patch_prcoms(text: str) -> str:
  LDA PRTYPE"""
     gcout_new = """GCOUT1 PHA
  BIT FIX80
- BMI GC5
- LDA PRTYPE"""
+ BPL GCOUT10
+ JMP GC5
+GCOUT10 LDA PRTYPE"""
     if text.count(gcout_old) != 1:
         raise RuntimeError(
             "PRCOMS.S GCOUT1 entry: expected exactly one original block"
