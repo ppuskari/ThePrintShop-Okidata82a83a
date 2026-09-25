@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import pathlib
 
@@ -45,6 +46,46 @@ def main() -> int:
             )
         status = "DISCOVERY" if expected_hash is None else "PASS"
         print(f"{name}: {status} len={len(data)} sha256={actual_hash}")
+
+    gc_orig = (args.build_dir / "GCDRAW.ORIG").read_bytes()
+    gc_oki = (args.build_dir / "GCDRAW.OKI").read_bytes()
+    sm = difflib.SequenceMatcher(None, gc_orig, gc_oki, autojunk=False)
+    opcodes = sm.get_opcodes()
+    edits = [op for op in opcodes if op[0] != "equal"]
+    inserted_bytes = sum(j2 - j1 for tag, i1, i2, j1, j2 in edits)
+    deleted_bytes = sum(i2 - i1 for tag, i1, i2, j1, j2 in edits)
+    # Candidate compact edit stream:
+    # 2-byte original offset + 1-byte delete + 1-byte insert + inserted data.
+    # Long runs can be split if a count exceeds 255.
+    compact_size = 0
+    compact_ops = 0
+    for tag, i1, i2, j1, j2 in edits:
+        old_n = i2 - i1
+        new_n = j2 - j1
+        chunks = max(
+            1,
+            (old_n + 254) // 255,
+            (new_n + 254) // 255,
+        )
+        compact_ops += chunks
+        compact_size += chunks * 4 + new_n
+    print(
+        "GCDRAW R31 binary delta: "
+        f"orig={len(gc_orig)} oki={len(gc_oki)} "
+        f"edit_ops={len(edits)} compact_ops={compact_ops} "
+        f"inserted_or_replacement_bytes={inserted_bytes} "
+        f"deleted_or_replaced_bytes={deleted_bytes} "
+        f"candidate_edit_stream={compact_size} bytes"
+    )
+    for op in edits[:40]:
+        tag, i1, i2, j1, j2 = op
+        print(
+            f"  {tag:7s} old +0x{i1:04X}..+0x{i2:04X} "
+            f"new +0x{j1:04X}..+0x{j2:04X} "
+            f"old_n={i2-i1} new_n={j2-j1}"
+        )
+    if len(edits) > 40:
+        print(f"  ... {len(edits)-40} more edit op(s)")
 
     lh_orig = (args.build_dir / "LHDRAW.ORIG").read_bytes()
     lh_oki = (args.build_dir / "LHDRAW.OKI").read_bytes()
