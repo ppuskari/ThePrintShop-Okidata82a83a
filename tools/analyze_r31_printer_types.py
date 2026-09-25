@@ -126,6 +126,33 @@ def main() -> int:
                 f"preview={printable}"
             )
 
+        live_sector_hashes = {}
+        for entry in catalog(runtime):
+            for index, (trk, sec) in enumerate(
+                file_sector_locations(runtime, entry)
+            ):
+                start = (trk * 16 + sec) * 256
+                data = runtime[start:start + 256]
+                digest = __import__("hashlib").sha256(data).hexdigest()
+                live_sector_hashes.setdefault(digest, []).append(
+                    (entry["name"], index, trk, sec)
+                )
+        print("orphan exact matches to live file data sectors:")
+        match_count = 0
+        for trk, sec in orphan_used:
+            start = (trk * 16 + sec) * 256
+            data = runtime[start:start + 256]
+            digest = __import__("hashlib").sha256(data).hexdigest()
+            matches = live_sector_hashes.get(digest, [])
+            if matches:
+                match_count += 1
+                formatted = " | ".join(
+                    f"{name}[{index}]@T{lt:02d}/S{ls:02d}"
+                    for name, index, lt, ls in matches
+                )
+                print(f"  T{trk:02d}/S{sec:02d} == {formatted}")
+        print(f"exact duplicate orphan sectors: {match_count}/{len(orphan_used)}")
+
     binary_rows = []
     duplicate_groups = {}
     for entry in catalog(runtime):
