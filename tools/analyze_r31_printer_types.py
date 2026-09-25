@@ -192,6 +192,55 @@ def main() -> int:
             print(f"  S{sec:02d}: {'IDENTICAL' if equal else 'DIFFERENT'}")
         print(f"track34 exact sector matches to track16: {t34_equal}/16")
 
+    print("=== ORPHAN T/S-LIST CHAIN PROOF ===")
+    for trk, sec in ((32, 10), (34, 15)):
+        start = (trk * 16 + sec) * 256
+        ts = runtime[start:start + 256]
+        pairs = []
+        for off in range(0x0C, 0x100, 2):
+            t, ss = ts[off], ts[off + 1]
+            if t == 0:
+                break
+            pairs.append((t, ss))
+        print(
+            f"T{trk:02d}/S{sec:02d}: "
+            f"next=T{ts[1]:02d}/S{ts[2]:02d} "
+            f"file_sector_offset={ts[5] | (ts[6] << 8)} "
+            f"pairs="
+            + " ".join(f"T{t:02d}/S{ss:02d}" for t, ss in pairs)
+        )
+
+    print("deleted DOS catalog entries:")
+    vtoc = runtime[(17 * 16) * 256:(17 * 16 + 1) * 256]
+    ct, cs = vtoc[1], vtoc[2]
+    deleted = 0
+    seen_cat = set()
+    while ct:
+        if (ct, cs) in seen_cat:
+            raise RuntimeError("catalog loop in deleted-entry audit")
+        seen_cat.add((ct, cs))
+        start = (ct * 16 + cs) * 256
+        catsec = runtime[start:start + 256]
+        for off in range(0x0B, 0x100 - 34, 35):
+            ent = catsec[off:off + 35]
+            if ent[0] != 0xFF:
+                continue
+            deleted += 1
+            raw_name = bytes(b & 0x7F for b in ent[3:33])
+            display = "".join(
+                chr(b) if 32 <= b < 127 else "."
+                for b in raw_name
+            ).rstrip(". ")
+            saved_track = ent[32] & 0x7F
+            print(
+                f"  catalog T{ct:02d}/S{cs:02d}+0x{off:02X}: "
+                f"saved_track={saved_track} name={display!r} "
+                f"raw_last=0x{ent[32]:02X}"
+            )
+        ct, cs = catsec[1], catsec[2]
+    print(f"deleted entry count: {deleted}")
+    print("")
+
     binary_rows = []
     duplicate_groups = {}
     for entry in catalog(runtime):
