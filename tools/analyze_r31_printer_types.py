@@ -99,6 +99,32 @@ def main() -> int:
             "orphan T/S: "
             + " ".join(f"T{t:02d}/S{s:02d}" for t, s in orphan_used)
         )
+        print("orphan sector content:")
+        by_digest = {}
+        for trk, sec in orphan_used:
+            start = (trk * 16 + sec) * 256
+            data = runtime[start:start + 256]
+            digest = __import__("hashlib").sha256(data).hexdigest()
+            key = (
+                digest,
+                sum(1 for b in data if b != 0),
+                sum(1 for b in data if b != 0xFF),
+            )
+            by_digest.setdefault(key, []).append((trk, sec, data))
+        for (digest, nonzero, nonff), members in by_digest.items():
+            sample = members[0][2]
+            printable = "".join(
+                chr(b) if 32 <= (b & 0x7F) < 127 else "."
+                for b in sample[:64]
+            )
+            coords = " ".join(
+                f"T{t:02d}/S{sec:02d}" for t, sec, _ in members
+            )
+            print(
+                f"  {coords}: sha256={digest[:16]} "
+                f"nonzero={nonzero}/256 nonff={nonff}/256 "
+                f"preview={printable}"
+            )
 
     binary_rows = []
     duplicate_groups = {}
