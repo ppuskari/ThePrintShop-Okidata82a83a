@@ -172,6 +172,31 @@ def main() -> int:
                 )
     print("")
 
+    print("=== CONFIG+6 / $95F6 UNUSED-BYTE AUDIT ===")
+    config_patterns = (
+        "$95F6", "$95f6", "CONFIG+6", "PISLOT+6",
+        "CONFIG + 6", "PISLOT + 6",
+    )
+    total_hits = 0
+    for disk_index, img in enumerate((d1, d2), start=1):
+        for entry in catalog(img):
+            name = entry["name"]
+            if not name.endswith(".S"):
+                continue
+            try:
+                src = binary_source_text(img, name)
+            except Exception:
+                continue
+            for line_no, line in enumerate(src.splitlines(), start=1):
+                if any(p in line for p in config_patterns):
+                    print(
+                        f"disk{disk_index} {name}:{line_no}: "
+                        f"{line.strip()}"
+                    )
+                    total_hits += 1
+    print(f"CONFIG+6 audit hits: {total_hits}")
+    print("")
+
     print("=== R31 QUESTIONS TO ANSWER ===")
     print("1. Is printer type 10 unused by all PRCOMS dispatch tables?")
     print("2. How is the printer-menu item count bounded?")
