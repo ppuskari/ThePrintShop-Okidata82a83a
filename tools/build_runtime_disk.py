@@ -1129,11 +1129,19 @@ def main() -> int:
     )
     ap.add_argument("--prcoms", type=pathlib.Path, required=True)
     ap.add_argument("--menus7", type=pathlib.Path, required=True)
+    ap.add_argument("--menus3", type=pathlib.Path, required=True)
+    ap.add_argument("--menus4", type=pathlib.Path, required=True)
     ap.add_argument(
         "--gcdraw",
         type=pathlib.Path,
         required=True,
-        help="compiled GCDRAW.OKI payload; installed as DRAW1",
+        help="compiled type-10 GCDRAW payload; installed as new DRAW6",
+    )
+    ap.add_argument(
+        "--lhdraw",
+        type=pathlib.Path,
+        required=True,
+        help="compiled 1791-byte type-10 LHDRAW head for new DRAW7",
     )
     ap.add_argument("--output", type=pathlib.Path, required=True)
     args = ap.parse_args()
@@ -1145,40 +1153,115 @@ def main() -> int:
         )
 
     entries = {e["name"].upper(): e for e in catalog(img)}
-    for required in ("PRCOMS", "MENUS7", "DRAW1", "DRAW4", "SYSLIB"):
-        if required not in entries:
-            raise RuntimeError(f"base disk missing required file {required}")
+    required = (
+        "PRCOMS", "MENUS7", "MENUS1", "MENUS3", "MENUS4",
+        "DRAW1", "DRAW3", "DRAW4", "SYSLIB",
+    )
+    for name in required:
+        if name not in entries:
+            raise RuntimeError(f"base disk missing required file {name}")
+    for name in ("DRAW6", "DRAW7", "DRAW8"):
+        if name in entries:
+            raise RuntimeError(f"base disk unexpectedly already contains {name}")
 
     print("Validating exact Print Shop runtime base...")
     verify_original(img)
 
+    _, original_draw3 = read_dos_binary(img, "DRAW3")
+    _, original_draw4 = read_dos_binary(img, "DRAW4")
+
     prcoms = args.prcoms.read_bytes()
     menus7 = args.menus7.read_bytes()
+    menus3 = args.menus3.read_bytes()
+    menus4 = args.menus4.read_bytes()
     gcdraw = args.gcdraw.read_bytes()
+    lhdraw = args.lhdraw.read_bytes()
 
-    print(f"  input PRCOMS len={len(prcoms)} sha256={sha256(prcoms)}")
-    print(f"  input MENUS7 len={len(menus7)} sha256={sha256(menus7)}")
-    print(f"  input GCDRAW/DRAW1 len={len(gcdraw)} sha256={sha256(gcdraw)}")
+    inputs = {
+        "PRCOMS": prcoms,
+        "MENUS7": menus7,
+        "MENUS3": menus3,
+        "MENUS4": menus4,
+        "GCDRAW/DRAW6": gcdraw,
+        "LHDRAW/DRAW7 head": lhdraw,
+    }
+    for name, data in inputs.items():
+        print(f"  input {name} len={len(data)} sha256={sha256(data)}")
 
-    print("Rewriting R27 executable overlays...")
+    expected_inputs = {
+        "PRCOMS": (
+            2044,
+            "e5d235ac23ecfc5b593bd9b46c74bf1669265a1db0b73f9e280df811b31dfa95",
+        ),
+        "MENUS7": (
+            3041,
+            "f6177227faff75262e4cac378488e5ec244a956663ed3173d01fb4e72c13fd85",
+        ),
+        "MENUS3": (2596, R31_MENUS3_SHA256),
+        "MENUS4": (1525, R31_MENUS4_SHA256),
+        "GCDRAW/DRAW6": (2810, R31_GCDRAW_SHA256),
+        "LHDRAW/DRAW7 head": (
+            R31_LHDRAW_HEAD_LENGTH,
+            R31_LHDRAW_OKI_HEAD_SHA256,
+        ),
+    }
+    for name, (length, digest) in expected_inputs.items():
+        data = inputs[name]
+        if len(data) != length or sha256(data) != digest:
+            raise RuntimeError(
+                f"{name}: R31 build input mismatch "
+                f"len={len(data)} sha256={sha256(data)}"
+            )
+
+    print("Installing R31 resident and menu selectors...")
     img = rewrite_dos_binary(img, "PRCOMS", prcoms)
     img = rewrite_dos_binary(img, "MENUS7", menus7)
-    img = rewrite_dos_binary(img, "DRAW1", gcdraw)
+    img = rewrite_dos_binary(img, "MENUS3", menus3)
+    img = rewrite_dos_binary(img, "MENUS4", menus4)
 
-    print("Patching exact shipped DRAW4 runtime for R30 banner text + R29 icon...")
-    img, draw4 = patch_banner_draw4(img)
+    print("Installing R31 cards/signs dispatch without growing MENUS1...")
+    img, draw1 = patch_draw1_dispatch(img)
+
+    print("Adding type-10 OkiGraph alternate overlays...")
+    img = add_dos_binary(
+        img, "DRAW6", gcdraw, load=0x7800, template_name="DRAW1"
+    )
+    draw7 = build_stationery_draw7_payload(img, lhdraw)
+    img = add_dos_binary(
+        img, "DRAW7", draw7, load=0x7800, template_name="DRAW3"
+    )
+    draw8 = build_banner_draw8_payload(img)
+    img = add_dos_binary(
+        img, "DRAW8", draw8, load=0x7800, template_name="DRAW4"
+    )
 
     print("Applying R14 paper-position patch without growing SYSLIB...")
     img, syslib = patch_test_paper_cr_only(img)
 
-    print("Reading patched overlays back through DOS T/S chains...")
+    # DRAW3 and DRAW4 must remain byte-for-byte historical for stock printers.
+    _, check_draw3 = read_dos_binary(img, "DRAW3")
+    _, check_draw4 = read_dos_binary(img, "DRAW4")
+    if check_draw3 != original_draw3:
+        raise RuntimeError("R31 changed historical DRAW3")
+    if check_draw4 != original_draw4:
+        raise RuntimeError("R31 changed historical DRAW4")
+    print(
+        "  legacy overlay preservation: PASS "
+        "DRAW3 and DRAW4 remain byte-for-byte historical"
+    )
+
+    print("Reading R31 files back through DOS T/S chains...")
     verify_patched(
         img,
         {
             "PRCOMS": prcoms,
             "MENUS7": menus7,
-            "DRAW1": gcdraw,
-            "DRAW4": draw4,
+            "MENUS3": menus3,
+            "MENUS4": menus4,
+            "DRAW1": draw1,
+            "DRAW6": gcdraw,
+            "DRAW7": draw7,
+            "DRAW8": draw8,
             "SYSLIB": syslib,
         },
     )
@@ -1198,7 +1281,10 @@ def main() -> int:
     print(f"Runtime image: {args.output}")
     print(f"Image bytes: {len(img)}")
     print(f"Image SHA256: {digest}")
-    print("PASS: R30 banner-text-densified runnable DOS disk constructed")
+    print(
+        "PASS: R31 separate stock 92/93 and type-10 OkiGraph "
+        "runtime disk constructed"
+    )
     return 0
 
 
