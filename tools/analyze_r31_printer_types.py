@@ -11,7 +11,7 @@ from __future__ import annotations
 import pathlib
 import re
 
-from inspect_printshop_source import catalog
+from inspect_printshop_source import catalog, fetch
 
 from patch_printshop_source import (
     binary_source_info,
@@ -59,6 +59,20 @@ def main() -> int:
 
     pl = pr.splitlines()
     ml = menus.splitlines()
+
+    runtime = fetch(
+        "https://mirrors.apple2.org.za/ftp.apple.asimov.net/"
+        "images/productivity/graphics/printshop/ColorPrintShop.DSK"
+    )
+    runtime_names = [entry["name"] for entry in catalog(runtime)]
+    print("=== RUNTIME DRAW FILE CATALOG ===")
+    for name in runtime_names:
+        if name.upper().startswith("DRAW"):
+            print(name)
+    for candidate in ("DRAW6", "DRAW7", "DRAW8"):
+        state = "USED" if candidate in {n.upper() for n in runtime_names} else "FREE"
+        print(f"{candidate}: {state}")
+    print("")
 
     print("=== EXACT MENUS7 PRINTER BLOCK ===")
     for n in range(1, min(181, len(ml) + 1)):
