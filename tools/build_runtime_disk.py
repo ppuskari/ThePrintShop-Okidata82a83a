@@ -1421,6 +1421,9 @@ def main() -> int:
                 f"len={len(data)} sha256={sha256(data)}"
             )
 
+    print("Reclaiming proven-stale sectors from untouched base disk...")
+    img = reclaim_r31_overlay_sectors(img)
+
     print("Installing R31 resident and menu selectors...")
     img = rewrite_dos_binary(img, "PRCOMS", prcoms)
     img = rewrite_dos_binary(img, "MENUS7", menus7)
@@ -1431,9 +1434,6 @@ def main() -> int:
 
     print("Installing R31 cards/signs dispatch without growing MENUS1...")
     img, draw1 = patch_draw1_dispatch(img)
-
-    print("Reclaiming proven-stale sectors for split overlays...")
-    img = reclaim_r31_overlay_sectors(img)
 
     print("Adding type-10 OkiGraph alternate overlays...")
     img = add_dos_binary(
