@@ -239,11 +239,7 @@ GCDRAW_START_OLD = """ LDA A2
 
 GCDRAW_START_NEW = """ LDA A2
  STA $60D1
- LDA $95F1
- CMP #10
- BEQ R31GST
- JSR LF36
-R31GST LDX #00
+ LDX #00
  STX RETFLAG"""
 
 GCDRAW_DUMP_OLD = """DUMP2 STX BADDR
@@ -262,9 +258,6 @@ GCDRAW_DUMP_NEW = """DUMP2 STX BADDR
  LDX #07
  LDY #00
  JSR CRLF
- LDA $95F1
- CMP #10
- BNE ROW
  LDX #00
  LDY #00
  JSR SENDGC
@@ -297,7 +290,7 @@ DUMP0B STA ROWCNT
  CMP #02
  BEQ DUMP0S
  LDY $95F1
- CPY #10
+ CPY #05
  BNE DUMP1
  DEC ROWCNT
  DEC ROWCNT
@@ -336,9 +329,6 @@ GCDRAW_SIGNSTEP_NEW = """ LDA SIDE
  LSR
  BCS SR07
  BEQ SR06
- LDA $95F1
- CMP #10
- BNE R31GSO
  LDA ROWCNT
  LSR
  BCS SR06
@@ -346,37 +336,13 @@ GCDRAW_SIGNSTEP_NEW = """ LDA SIDE
  CMP #05
  BNE SR08A
  DEC ROWCNT
- BNE SR06
-R31GSO LDA ROWCNT
- LSR
- BCC SR08A"""
+ BNE SR06"""
 
-GCDRAW_MOVE_NEW = """SR06 LDA $95F1
- CMP #10
- BNE R31GP
- LDX #00
+GCDRAW_MOVE_NEW = """SR06 LDX #00
  BEQ R9MC
-R31GP LDA BADDR
- CLC
- ADC #$C0
- STA BADDR
- LDA BADDR+1
- ADC #01
- BNE SR08
 *
-SR07 LDA $95F1
- CMP #10
- BNE R31GM
- LDX #02
+SR07 LDX #02
 R9MC JSR R9MOVE
- JMP SR08A
-R31GM LDA BADDR
- SEC
- SBC #$C0
- STA BADDR
- LDA BADDR+1
- SBC #01
-SR08 STA BADDR+1
 *
 SR08A DEC ROWCNT
  BNE SR09
@@ -392,12 +358,9 @@ GCDRAW_SENDGC_NEW = """ LDX #00
  LDY SIDE
  LDA GCNUMH,Y
  TAY
- LDA $95F1
- CMP #10
- BNE R31GSG
  LDA #$0D
  JSR COUT1
-R31GSG JSR SENDGC"""
+ JSR SENDGC"""
 
 GCDRAW_HELPER_OLD = """ BCS SR02
 *
@@ -405,7 +368,7 @@ GCNUMH HEX 040204"""
 
 GCDRAW_HELPER_NEW = """ BCS SR02
 *
-* R31 TYPE-10 OKIGRAPH CARD SOURCE-ROW RESAMPLER.
+* R9A TYPE-5 CARD SOURCE-ROW RESAMPLER.
 * X=0/2 SELECTS + / - SOURCE DIRECTION.
 *
 R9MOVE LDA SIDE
@@ -436,21 +399,13 @@ GCDRAW_LF36_OLD = """LF36A LDX #02
  INY
 LF36B JMP CRLF"""
 
-GCDRAW_LF36_NEW = """LF36A LDA $95F1
- CMP #10
- BNE R31LFO
- LDY SIDE
+GCDRAW_LF36_NEW = """LF36A LDY SIDE
  LDX R22LFX,Y
  INY
  CPY #03
  BCC LF36B
  DEY
 LF36B JMP CRLF
-R31LFO LDX #02
- LDY SIDE
- BNE LF36B
- INY
- BNE LF36B
 R22LFX DFB 2,0,2"""
 
 
@@ -472,7 +427,7 @@ def patch_gcdraw(text: str) -> str:
         patched,
         GCDRAW_ROWCOUNT_OLD,
         GCDRAW_ROWCOUNT_NEW,
-        "GCDRAW.S type-10 card row count",
+        "GCDRAW.S type-5 card row count",
     )
     patched = replace_once(
         patched,
@@ -484,13 +439,13 @@ def patch_gcdraw(text: str) -> str:
         patched,
         GCDRAW_SIGNSTEP_OLD,
         GCDRAW_SIGNSTEP_NEW,
-        "GCDRAW.S type-10 sign duplicate-row trim",
+        "GCDRAW.S type-5 sign duplicate-row trim",
     )
     patched = replace_once(
         patched,
         GCDRAW_MOVE_OLD,
         GCDRAW_MOVE_NEW,
-        "GCDRAW.S type-10 card/source stepping",
+        "GCDRAW.S type-5 card/source stepping",
     )
     patched = replace_once(
         patched,
@@ -502,7 +457,7 @@ def patch_gcdraw(text: str) -> str:
         patched,
         GCDRAW_HELPER_OLD,
         GCDRAW_HELPER_NEW,
-        "GCDRAW.S type-10 card row resampler",
+        "GCDRAW.S type-5 card row resampler",
     )
 
 BDRAW_TEXT_OLD = """BSTR6 LDX #00
