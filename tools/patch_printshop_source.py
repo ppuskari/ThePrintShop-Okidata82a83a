@@ -862,12 +862,14 @@ def write_patched_disks(
     ):
         raise RuntimeError("generated source disk 1 does not contain the OkiGraph GC5 patch")
     if (
-        NEW_MENU not in rt2
-        or OLD_MENU in rt2
+        rt2.count(NEW_MENU) != 1
+        or rt2.count(OLD_MENU) != 1
+        or "PRMAX EQU 10" not in rt2
         or " STA $B9\n" not in rt2
     ):
         raise RuntimeError(
-            "generated source disk 2 does not contain the OkiGraph menu/init patch"
+            "generated source disk 2 does not contain the R31 "
+            "stock-92/93 plus type-10 OkiGraph menu"
         )
 
     print("  generated DOS 3.3 source disks:")
@@ -909,21 +911,26 @@ def main() -> int:
     patched_gcdraw = patch_gcdraw(gcdraw)
     patched_bdraw = patch_bdraw(bdraw)
 
-    # These are the two invariants that keep the first hardware build
-    # deliberately low-risk.
-    assert len(OLD_MENU) == len(NEW_MENU) == 23
+    if patched_menus7.count(OLD_MENU) != 1:
+        raise RuntimeError("R31 must retain exactly one stock 92/93 menu item")
+    if patched_menus7.count(NEW_MENU) != 1:
+        raise RuntimeError("R31 must add exactly one OkiGraph type-10 item")
+    if "PRMAX EQU 10" not in patched_menus7:
+        raise RuntimeError("R31 printer selector did not expand to 10 items")
 
-    print("Print Shop v2 OkiGraph I source patch: PASS")
-    print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
-    print("  menu label: 23 -> 23 characters")
+    print("Print Shop v2 OkiGraph I R31 source split: PASS")
+    print("  printer type 5 : stock OKIDATA MICROLINE 92,93 restored")
+    print("  printer type 10: OKI 82A/83A OKIGRAPH I")
     print("  R27 base: golden R21 cards + golden R26 signs unchanged")
-    print("  R27 stationery: type-5 X=40/Y=14 becomes 68 native graphics feeds")
+    print("  R31 core: type 5 retains historical PRCOMS semantics")
+    print("  R31 core: type 10 uses compact OkiGraph graphics state")
+    print("  R27 stationery geometry remains to be moved from type 5 to type 10")
     print("  R27 native move: 68 x 15/144 inch = 179.917 mm")
     print("  R27 preserves following X=8 and X=7 text-feed calls")
     print("  R29 banner text: native feed cadence 1,1,2 = exact 20/144 average")
     print("  R29 banner icon: 15 source slices -> 13 native positions")
     print("  R29 banner changes are confined to assembled BDRAW/DRAW4")
-    print("  graphics data: R11 original Oki type-5 $03 escape semantics")
+    print("  graphics data: R11 OkiGraph $03 escape semantics target type 10")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
     print(f"  MENUS7 source high-bit ratio: {menus7_info['high_ratio']:.3f}")
