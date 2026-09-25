@@ -507,13 +507,8 @@ R31_LHDRAW_PAGE_NEW = """MOV575 LDX #00
 
 
 def patch_lhmenus(text: str) -> str:
-    """Patch two loaded DRAW3 immediates only for OkiGraph type 10."""
-    return replace_once(
-        text,
-        R31_LHMENU_LOAD_OLD,
-        R31_LHMENU_LOAD_NEW,
-        "LHMENUS.S type-10 DRAW3 in-memory geometry patch",
-    )
+    """R31 keeps MENUS3 source historical; runtime adds an EOF wrapper."""
+    return text
 
 
 def patch_bmenus(text: str) -> str:
