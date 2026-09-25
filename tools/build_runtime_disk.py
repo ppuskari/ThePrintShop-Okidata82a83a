@@ -60,10 +60,28 @@ EXPECTED_ORIGINAL = {
         "length": 2737,
         "sha256": "cfa548eb4f950156c14639372f2681edbaa810e86f0945d73c24e0304e436353",
     },
+    "DRAW3": {
+        "load": 0x7800,
+        "length": 2811,
+    },
     "DRAW4": {
         "load": 0x7800,
         "length": 1012,
         "sha256": "787a97a6b6441724da019edf6ec586df3cf56acc61047db0b402553ac03699e4",
+    },
+    "MENUS1": {
+        "load": 0x4000,
+        "length": 6136,
+    },
+    "MENUS3": {
+        "load": 0x4000,
+        "length": 2584,
+        "sha256": "ba570d635de4ebed8f32599146c56ebf975f27ed89e967d220175963d8b7922d",
+    },
+    "MENUS4": {
+        "load": 0x4000,
+        "length": 1513,
+        "sha256": "b80c97a43d1a89134575f76db5a0f3ce633f523136cffb12f2afa33c21692d58",
     },
 }
 
@@ -105,10 +123,11 @@ def verify_original(img: bytes) -> None:
                 f"{name}: expected {expect['length']} bytes, got {len(payload)}"
             )
         digest = sha256(payload)
-        if digest != expect["sha256"]:
+        expected_hash = expect.get("sha256")
+        if expected_hash is not None and digest != expected_hash:
             raise RuntimeError(
                 f"{name}: base runtime mismatch; expected "
-                f"{expect['sha256']}, got {digest}"
+                f"{expected_hash}, got {digest}"
             )
         if "load" in expect and load != expect["load"]:
             raise RuntimeError(
@@ -216,6 +235,112 @@ def _find_free_sector(img: bytes) -> tuple[int, int]:
                 return trk, sec
 
     raise RuntimeError("no free DOS sector available for DRAW4 growth")
+
+
+def _allocate_sector(img: bytes) -> tuple[bytes, tuple[int, int]]:
+    """Allocate and clear one DOS 3.3 sector, updating only the VTOC bitmap."""
+    trk, sec = _find_free_sector(img)
+    out = bytearray(img)
+    vtoc_off, mask = _vtoc_bitmap_offset(trk, sec)
+    if not (out[vtoc_off] & mask):
+        raise RuntimeError(f"sector {trk}/{sec} is not free in VTOC")
+    out[vtoc_off] &= (~mask) & 0xFF
+    start = _sector_offset(trk, sec)
+    out[start:start + SECTOR_SIZE] = bytes(SECTOR_SIZE)
+    return bytes(out), (trk, sec)
+
+
+def _find_free_catalog_slot(img: bytes) -> int:
+    vtoc = sector(img, 17, 0)
+    trk, sec = vtoc[1], vtoc[2]
+    seen: set[tuple[int, int]] = set()
+    while trk:
+        key = (trk, sec)
+        if key in seen:
+            raise RuntimeError("catalog T/S loop while finding free slot")
+        seen.add(key)
+        cat = sector(img, trk, sec)
+        next_trk, next_sec = cat[1], cat[2]
+        base = _sector_offset(trk, sec)
+        for off in range(0x0B, 0x100 - 34, 35):
+            if cat[off] in (0x00, 0xFF):
+                return base + off
+        trk, sec = next_trk, next_sec
+    raise RuntimeError("DOS catalog has no free entry for R31 overlay")
+
+
+def _encode_dos_name(name: str) -> bytes:
+    raw = name.upper().encode("ascii")
+    if not 1 <= len(raw) <= 30:
+        raise ValueError("DOS filename must be 1..30 ASCII characters")
+    if any(c in b",= ;" for c in raw):
+        raise ValueError(f"unsupported DOS filename {name!r}")
+    return bytes(c | 0x80 for c in raw) + bytes([0xA0]) * (30 - len(raw))
+
+
+def add_dos_binary(
+    img: bytes,
+    name: str,
+    payload: bytes,
+    *,
+    load: int,
+    template_name: str,
+) -> bytes:
+    """Create a new one-T/S-list DOS 3.3 binary file."""
+    if any(e["name"].upper() == name.upper() for e in catalog(img)):
+        raise RuntimeError(f"{name}: file already exists")
+
+    packed = (
+        load.to_bytes(2, "little")
+        + len(payload).to_bytes(2, "little")
+        + payload
+    )
+    data_count = (len(packed) + SECTOR_SIZE - 1) // SECTOR_SIZE
+    if data_count > (SECTOR_SIZE - 0x0C) // 2:
+        raise RuntimeError(f"{name}: payload needs multiple T/S-list sectors")
+
+    slot = _find_free_catalog_slot(img)
+    template = find_entry(img, template_name)
+
+    out, ts_loc = _allocate_sector(img)
+    data_locs: list[tuple[int, int]] = []
+    for _ in range(data_count):
+        out, loc = _allocate_sector(out)
+        data_locs.append(loc)
+
+    outb = bytearray(out)
+    ts_start = _sector_offset(*ts_loc)
+    # First/only T/S list: next pointer and sector offset are already zero.
+    for index, (trk, sec) in enumerate(data_locs):
+        off = ts_start + 0x0C + index * 2
+        outb[off] = trk
+        outb[off + 1] = sec
+
+    padded = packed + bytes(data_count * SECTOR_SIZE - len(packed))
+    for index, (trk, sec) in enumerate(data_locs):
+        start = _sector_offset(trk, sec)
+        chunk = padded[index * SECTOR_SIZE:(index + 1) * SECTOR_SIZE]
+        outb[start:start + SECTOR_SIZE] = chunk
+
+    entry = bytearray(35)
+    entry[0], entry[1] = ts_loc
+    entry[2] = template["type"] | (0x80 if template["locked"] else 0)
+    entry[3:33] = _encode_dos_name(name)
+    sectors_used = 1 + data_count
+    entry[33] = sectors_used & 0xFF
+    entry[34] = (sectors_used >> 8) & 0xFF
+    outb[slot:slot + 35] = entry
+
+    result = bytes(outb)
+    check_load, check_payload = read_dos_binary(result, name)
+    if check_load != load or check_payload != payload:
+        raise RuntimeError(f"{name}: new DOS binary failed read-back")
+    print(
+        f"  added {name}: load=0x{load:04X} len={len(payload)} "
+        f"T/S=T{ts_loc[0]:02d}/S{ts_loc[1]:02d} "
+        f"data_sectors={data_count} sha256={sha256(payload)}"
+    )
+    return result
 
 
 def _grow_file_one_data_sector(img: bytes, name: str) -> bytes:
