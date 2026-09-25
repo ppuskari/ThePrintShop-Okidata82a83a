@@ -46,6 +46,25 @@ def main() -> int:
         status = "DISCOVERY" if expected_hash is None else "PASS"
         print(f"{name}: {status} len={len(data)} sha256={actual_hash}")
 
+    lh_orig = (args.build_dir / "LHDRAW.ORIG").read_bytes()
+    lh_oki = (args.build_dir / "LHDRAW.OKI").read_bytes()
+    lh_diffs = [
+        (i, a, b)
+        for i, (a, b) in enumerate(zip(lh_orig, lh_oki))
+        if a != b
+    ]
+    print(
+        "LHDRAW R31 immediate diffs: "
+        + ", ".join(
+            f"+0x{i:04X} {a:02X}->{b:02X}"
+            for i, a, b in lh_diffs
+        )
+    )
+    if [(a, b) for _, a, b in lh_diffs] != [(40, 0), (14, 68)]:
+        raise RuntimeError(
+            f"LHDRAW R31 unexpected diff set: {lh_diffs}"
+        )
+
     print("PASS: original controls and OkiGraph overlays are reproducible")
     return 0
 
