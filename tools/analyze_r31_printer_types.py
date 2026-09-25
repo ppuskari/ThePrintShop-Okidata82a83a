@@ -12,6 +12,11 @@ import pathlib
 import re
 
 from inspect_printshop_source import catalog, fetch, file_sectors
+from build_runtime_disk import (
+    _referenced_sectors,
+    _ts_list_sectors,
+    _vtoc_sector_is_free,
+)
 
 from patch_printshop_source import (
     binary_source_info,
@@ -72,6 +77,76 @@ def main() -> int:
     for candidate in ("DRAW6", "DRAW7", "DRAW8"):
         state = "USED" if candidate in {n.upper() for n in runtime_names} else "FREE"
         print(f"{candidate}: {state}")
+    print("")
+
+    print("=== RUNTIME DISK SPACE AUDIT ===")
+    referenced = _referenced_sectors(runtime)
+    orphan_used = []
+    vtoc_free = []
+    for trk in range(3, 35):
+        if trk == 17:
+            continue
+        for sec in range(16):
+            free = _vtoc_sector_is_free(runtime, trk, sec)
+            if free:
+                vtoc_free.append((trk, sec))
+            elif (trk, sec) not in referenced:
+                orphan_used.append((trk, sec))
+    print(f"VTOC-free non-system sectors: {len(vtoc_free)}")
+    print(f"marked-used but unreferenced sectors: {len(orphan_used)}")
+    if orphan_used:
+        print(
+            "orphan T/S: "
+            + " ".join(f"T{t:02d}/S{s:02d}" for t, s in orphan_used)
+        )
+
+    binary_rows = []
+    duplicate_groups = {}
+    for entry in catalog(runtime):
+        data_locs = file_sector_locations(runtime, entry)
+        ts_locs = _ts_list_sectors(runtime, entry)
+        raw = file_sectors(runtime, entry)
+        if entry["type"] == 4 and len(raw) >= 4:
+            logical = raw[2] | (raw[3] << 8)
+            if 0 < logical <= len(raw) - 4:
+                needed_data = (4 + logical + 255) // 256
+                extra_data = len(data_locs) - needed_data
+                logical_blob = raw[:4 + logical]
+                digest = __import__("hashlib").sha256(logical_blob).hexdigest()
+                binary_rows.append(
+                    (
+                        entry["name"], logical, len(data_locs),
+                        len(ts_locs), extra_data, digest,
+                    )
+                )
+                duplicate_groups.setdefault(digest, []).append(
+                    (entry["name"], len(data_locs), len(ts_locs), logical)
+                )
+    reclaim_extra = sum(max(0, row[4]) for row in binary_rows)
+    print(f"whole extra data sectors in binary files: {reclaim_extra}")
+    for row in binary_rows:
+        if row[4] > 0:
+            print(
+                f"  overallocated {row[0]}: payload={row[1]} "
+                f"data={row[2]} ts={row[3]} extra_data={row[4]}"
+            )
+    print("duplicate logical binary groups:")
+    dup_count = 0
+    for digest, group in duplicate_groups.items():
+        if len(group) < 2:
+            continue
+        dup_count += 1
+        print(
+            "  "
+            + digest[:12]
+            + " "
+            + " | ".join(
+                f"{name}(payload={logical},data={data},ts={ts})"
+                for name, data, ts, logical in group
+            )
+        )
+    if dup_count == 0:
+        print("  none")
     print("")
 
     print("=== RUNTIME MENU FILE BUDGETS ===")
