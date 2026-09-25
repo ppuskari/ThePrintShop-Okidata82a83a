@@ -66,7 +66,7 @@ Write-Host ""
 
 Push-Location $RepoRoot
 try {
-    Write-Host "Running R29 regression tests..."
+    Write-Host "Running R31 regression tests..."
     Invoke-Checked {
         py -3 -m unittest discover -s tests -v
     } "Regression tests"
@@ -115,7 +115,10 @@ try {
     $Runtime = Join-Path $OutPath "PrintShop-Okidata82a83a-OkiGraphI.dsk"
     $Prcoms = Join-Path $OutPath "PRCOMS.OKI"
     $Menus7 = Join-Path $OutPath "MENUS7.OKI"
+    $Menus3 = Join-Path $OutPath "MENUS3.OKI"
+    $Menus4 = Join-Path $OutPath "MENUS4.OKI"
     $Gcdraw = Join-Path $OutPath "GCDRAW.OKI"
+    $Lhdraw = Join-Path $OutPath "LHDRAW.OKI"
 
     Write-Host ""
     Write-Host "Constructing runnable Print Shop DOS disk..."
@@ -123,7 +126,10 @@ try {
         "tools\build_runtime_disk.py",
         "--prcoms", $Prcoms,
         "--menus7", $Menus7,
+        "--menus3", $Menus3,
+        "--menus4", $Menus4,
         "--gcdraw", $Gcdraw,
+        "--lhdraw", $Lhdraw,
         "--output", $Runtime
     )
     if ($BaseDisk) {
