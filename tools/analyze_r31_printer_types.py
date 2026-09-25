@@ -11,7 +11,7 @@ from __future__ import annotations
 import pathlib
 import re
 
-from inspect_printshop_source import catalog, fetch
+from inspect_printshop_source import catalog, fetch, file_sectors
 
 from patch_printshop_source import (
     binary_source_info,
@@ -72,6 +72,20 @@ def main() -> int:
     for candidate in ("DRAW6", "DRAW7", "DRAW8"):
         state = "USED" if candidate in {n.upper() for n in runtime_names} else "FREE"
         print(f"{candidate}: {state}")
+    print("")
+
+    print("=== RUNTIME MENU FILE BUDGETS ===")
+    runtime_entries = {e["name"].upper(): e for e in catalog(runtime)}
+    for name in ("MENUS1", "MENUS3", "MENUS4", "DRAW1", "DRAW3", "DRAW4"):
+        entry = runtime_entries[name]
+        raw = file_sectors(runtime, entry)
+        load = raw[0] | (raw[1] << 8)
+        length = raw[2] | (raw[3] << 8)
+        capacity = len(file_sector_locations(runtime, entry)) * 256
+        print(
+            f"{name}: load=0x{load:04X} payload={length} "
+            f"capacity={capacity} spare={capacity - 4 - length}"
+        )
     print("")
 
     print("=== EXACT MENUS7 PRINTER BLOCK ===")
