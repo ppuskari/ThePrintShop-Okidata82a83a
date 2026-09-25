@@ -172,6 +172,32 @@ def main() -> int:
                 )
     print("")
 
+    print("=== PRECISE DRAW FILENAME LITERALS ===")
+    draw_lit = re.compile(
+        r"\\bASC\\s+'DRAW[1-4](?:,D[1-3])?'",
+        re.I,
+    )
+    for disk_index, img in enumerate((d1, d2), start=1):
+        for entry in catalog(img):
+            name = entry["name"]
+            if not name.endswith(".S"):
+                continue
+            try:
+                src = binary_source_text(img, name)
+            except Exception:
+                continue
+            sl = src.splitlines()
+            for i, line in enumerate(sl):
+                if not draw_lit.search(line):
+                    continue
+                print(
+                    f"-- disk{disk_index} {name} literal at line {i + 1} --"
+                )
+                for n in range(max(0, i - 18), min(len(sl), i + 28)):
+                    print(f"{n + 1:5d}: {sl[n]}")
+                print("")
+    print("")
+
     print("=== DRAW OVERLAY LOADER AUDIT ===")
     overlay_terms = ("DRAW1", "DRAW2", "DRAW3", "DRAW4", "BLOAD", "DRAW")
     for disk_index, img in enumerate((d1, d2), start=1):
