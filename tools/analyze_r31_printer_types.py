@@ -200,6 +200,41 @@ def main() -> int:
                 print("")
     print("")
 
+    print("=== DRAW STRING / DYNAMIC LOADER AUDIT ===")
+    for disk_index, img in enumerate((d1, d2), start=1):
+        for entry in catalog(img):
+            name = entry["name"]
+            if not name.endswith(".S"):
+                continue
+            try:
+                src = binary_source_text(img, name)
+            except Exception:
+                continue
+            sl = src.splitlines()
+            for i, line in enumerate(sl):
+                u = " ".join(line.strip().upper().split())
+                quoted_draw = (
+                    ("ASC" in u or "HEX" in u)
+                    and ("'DRAW" in u or '"DRAW' in u)
+                )
+                dynamic_draw = (
+                    ("STA" in u or "INC" in u or "ADC" in u or "ORA" in u)
+                    and ("DRAW" in u)
+                )
+                draw_bload = "BLOAD" in u and any(
+                    "DRAW" in " ".join(x.strip().upper().split())
+                    for x in sl[max(0, i - 12):i + 1]
+                )
+                if not (quoted_draw or dynamic_draw or draw_bload):
+                    continue
+                print(
+                    f"-- disk{disk_index} {name} around line {i + 1} --"
+                )
+                for n in range(max(0, i - 15), min(len(sl), i + 22)):
+                    print(f"{n + 1:5d}: {sl[n]}")
+                print("")
+    print("")
+
     print("=== DRAW OVERLAY LOADER AUDIT ===")
     overlay_terms = ("DRAW1", "DRAW2", "DRAW3", "DRAW4", "BLOAD", "DRAW")
     for disk_index, img in enumerate((d1, d2), start=1):
