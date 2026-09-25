@@ -173,10 +173,12 @@ def main() -> int:
     print("")
 
     print("=== PRECISE DRAW FILENAME LITERALS ===")
-    draw_lit = re.compile(
-        r"\\bASC\\s+'DRAW[1-4](?:,D[1-3])?'",
-        re.I,
-    )
+    def is_draw_literal(line: str) -> bool:
+        compact = " ".join(line.strip().upper().split())
+        return any(
+            f"ASC 'DRAW{n}" in compact
+            for n in range(1, 5)
+        )
     for disk_index, img in enumerate((d1, d2), start=1):
         for entry in catalog(img):
             name = entry["name"]
@@ -188,7 +190,7 @@ def main() -> int:
                 continue
             sl = src.splitlines()
             for i, line in enumerate(sl):
-                if not draw_lit.search(line):
+                if not is_draw_literal(line):
                     continue
                 print(
                     f"-- disk{disk_index} {name} literal at line {i + 1} --"
