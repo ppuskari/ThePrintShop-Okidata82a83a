@@ -153,6 +153,45 @@ def main() -> int:
                 print(f"  T{trk:02d}/S{sec:02d} == {formatted}")
         print(f"exact duplicate orphan sectors: {match_count}/{len(orphan_used)}")
 
+        # Stronger provenance pass: compare against every referenced sector,
+        # including file T/S-list sectors. This distinguishes a complete
+        # stale track copy from merely similar application data.
+        all_live_hashes = {}
+        for lt, ls in sorted(referenced):
+            if (lt, ls) in orphan_used:
+                continue
+            start = (lt * 16 + ls) * 256
+            data = runtime[start:start + 256]
+            digest = __import__("hashlib").sha256(data).hexdigest()
+            all_live_hashes.setdefault(digest, []).append((lt, ls))
+        print("orphan exact matches to any referenced sector:")
+        all_match_count = 0
+        for trk, sec in orphan_used:
+            start = (trk * 16 + sec) * 256
+            data = runtime[start:start + 256]
+            digest = __import__("hashlib").sha256(data).hexdigest()
+            matches = all_live_hashes.get(digest, [])
+            if matches:
+                all_match_count += 1
+                print(
+                    f"  T{trk:02d}/S{sec:02d} == "
+                    + " ".join(f"T{t:02d}/S{s:02d}" for t, s in matches)
+                )
+        print(
+            f"all-referenced duplicate orphan sectors: "
+            f"{all_match_count}/{len(orphan_used)}"
+        )
+
+        print("track 34 vs track 16 sector-by-sector:")
+        t34_equal = 0
+        for sec in range(16):
+            a0 = (34 * 16 + sec) * 256
+            b0 = (16 * 16 + sec) * 256
+            equal = runtime[a0:a0+256] == runtime[b0:b0+256]
+            t34_equal += int(equal)
+            print(f"  S{sec:02d}: {'IDENTICAL' if equal else 'DIFFERENT'}")
+        print(f"track34 exact sector matches to track16: {t34_equal}/16")
+
     binary_rows = []
     duplicate_groups = {}
     for entry in catalog(runtime):
