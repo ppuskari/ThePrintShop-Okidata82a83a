@@ -290,7 +290,7 @@ DUMP0B STA ROWCNT
  CMP #02
  BEQ DUMP0S
  LDY $95F1
- CPY #05
+ CPY #10
  BNE DUMP1
  DEC ROWCNT
  DEC ROWCNT
@@ -368,7 +368,7 @@ GCNUMH HEX 040204"""
 
 GCDRAW_HELPER_NEW = """ BCS SR02
 *
-* R9A TYPE-5 CARD SOURCE-ROW RESAMPLER.
+* R9A TYPE-10 OKIGRAPH CARD SOURCE-ROW RESAMPLER.
 * X=0/2 SELECTS + / - SOURCE DIRECTION.
 *
 R9MOVE LDA SIDE
@@ -427,7 +427,7 @@ def patch_gcdraw(text: str) -> str:
         patched,
         GCDRAW_ROWCOUNT_OLD,
         GCDRAW_ROWCOUNT_NEW,
-        "GCDRAW.S type-5 card row count",
+        "GCDRAW.S type-10 card row count",
     )
     patched = replace_once(
         patched,
@@ -439,13 +439,13 @@ def patch_gcdraw(text: str) -> str:
         patched,
         GCDRAW_SIGNSTEP_OLD,
         GCDRAW_SIGNSTEP_NEW,
-        "GCDRAW.S type-5 sign duplicate-row trim",
+        "GCDRAW.S type-10 sign duplicate-row trim",
     )
     patched = replace_once(
         patched,
         GCDRAW_MOVE_OLD,
         GCDRAW_MOVE_NEW,
-        "GCDRAW.S type-5 card/source stepping",
+        "GCDRAW.S type-10 card/source stepping",
     )
     patched = replace_once(
         patched,
@@ -457,8 +457,75 @@ def patch_gcdraw(text: str) -> str:
         patched,
         GCDRAW_HELPER_OLD,
         GCDRAW_HELPER_NEW,
-        "GCDRAW.S type-5 card row resampler",
+        "GCDRAW.S type-10 card row resampler",
     )
+
+R31_LHMENU_LOAD_OLD = """PRINT1 JSR PSDID
+ LDX #DRAW3
+ LDY #>DRAW3"""
+
+R31_LHMENU_LOAD_NEW = """PRINT1 JSR PSDID
+ LDA $95F1
+ CMP #10
+ BNE R31D3
+ LDA #$37
+ STA DRAW3+4
+R31D3 LDX #DRAW3
+ LDY #>DRAW3"""
+
+R31_BMENU_LOAD_OLD = """ JSR PSDID
+ LDX #DRAW4
+ LDY #>DRAW4
+ JSR BLOAD"""
+
+R31_BMENU_LOAD_NEW = """ JSR PSDID
+ LDA $95F1
+ CMP #10
+ BNE R31D4
+ LDA #$38
+ STA DRAW4+4
+R31D4 LDX #DRAW4
+ LDY #>DRAW4
+ JSR BLOAD"""
+
+R31_LHDRAW_PAGE_OLD = """MOV575 LDX #40
+ LDY #14
+ JSR MOVCRLF"""
+
+R31_LHDRAW_PAGE_NEW = """MOV575 LDX #00
+ LDY #68
+ JSR MOVCRLF"""
+
+
+def patch_lhmenus(text: str) -> str:
+    """Route letterhead/stationery to DRAW7 only for OkiGraph type 10."""
+    return replace_once(
+        text,
+        R31_LHMENU_LOAD_OLD,
+        R31_LHMENU_LOAD_NEW,
+        "LHMENUS.S type-10 DRAW7 selector",
+    )
+
+
+def patch_bmenus(text: str) -> str:
+    """Route banners to DRAW8 only for OkiGraph type 10."""
+    return replace_once(
+        text,
+        R31_BMENU_LOAD_OLD,
+        R31_BMENU_LOAD_NEW,
+        "BMENUS.S type-10 DRAW8 selector",
+    )
+
+
+def patch_lhdraw(text: str) -> str:
+    """Move the golden R27 page gap into the OkiGraph-only DRAW7 overlay."""
+    return replace_once(
+        text,
+        R31_LHDRAW_PAGE_OLD,
+        R31_LHDRAW_PAGE_NEW,
+        "LHDRAW.S R27 68-native-feed stationery gap",
+    )
+
 
 BDRAW_TEXT_OLD = """BSTR6 LDX #00
  LDY #01
