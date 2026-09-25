@@ -63,6 +63,7 @@ EXPECTED_ORIGINAL = {
     "DRAW3": {
         "load": 0x7800,
         "length": 2811,
+        "sha256": "072130b812021e1b586c69951ffcf111ca93043fb97452113954f76d6796a046",
     },
     "DRAW4": {
         "load": 0x7800,
@@ -72,6 +73,7 @@ EXPECTED_ORIGINAL = {
     "MENUS1": {
         "load": 0x4000,
         "length": 6136,
+        "sha256": "a133a2b2c72a970a722ece9f5c03a0823e047b3bc05fece6b14b5c3715f37c40",
     },
     "MENUS3": {
         "load": 0x4000,
@@ -1221,19 +1223,12 @@ def main() -> int:
     )
     ap.add_argument("--prcoms", type=pathlib.Path, required=True)
     ap.add_argument("--menus7", type=pathlib.Path, required=True)
-    ap.add_argument("--menus3", type=pathlib.Path, required=True)
     ap.add_argument("--menus4", type=pathlib.Path, required=True)
     ap.add_argument(
         "--gcdraw",
         type=pathlib.Path,
         required=True,
         help="compiled type-10 GCDRAW payload; installed as new DRAW6",
-    )
-    ap.add_argument(
-        "--lhdraw",
-        type=pathlib.Path,
-        required=True,
-        help="compiled 1791-byte type-10 LHDRAW head for new DRAW7",
     )
     ap.add_argument("--output", type=pathlib.Path, required=True)
     args = ap.parse_args()
@@ -1252,7 +1247,7 @@ def main() -> int:
     for name in required:
         if name not in entries:
             raise RuntimeError(f"base disk missing required file {name}")
-    for name in ("DRAW6", "DRAW7", "DRAW8"):
+    for name in ("DRAW6", "DRAW8"):
         if name in entries:
             raise RuntimeError(f"base disk unexpectedly already contains {name}")
 
@@ -1264,18 +1259,14 @@ def main() -> int:
 
     prcoms = args.prcoms.read_bytes()
     menus7 = args.menus7.read_bytes()
-    menus3 = args.menus3.read_bytes()
     menus4 = args.menus4.read_bytes()
     gcdraw = args.gcdraw.read_bytes()
-    lhdraw = args.lhdraw.read_bytes()
 
     inputs = {
         "PRCOMS": prcoms,
         "MENUS7": menus7,
-        "MENUS3": menus3,
         "MENUS4": menus4,
         "GCDRAW/DRAW6": gcdraw,
-        "LHDRAW/DRAW7 head": lhdraw,
     }
     for name, data in inputs.items():
         print(f"  input {name} len={len(data)} sha256={sha256(data)}")
@@ -1289,13 +1280,8 @@ def main() -> int:
             3041,
             "f6177227faff75262e4cac378488e5ec244a956663ed3173d01fb4e72c13fd85",
         ),
-        "MENUS3": (2596, R31_MENUS3_SHA256),
         "MENUS4": (1525, R31_MENUS4_SHA256),
         "GCDRAW/DRAW6": (2810, R31_GCDRAW_SHA256),
-        "LHDRAW/DRAW7 head": (
-            R31_LHDRAW_HEAD_LENGTH,
-            R31_LHDRAW_OKI_HEAD_SHA256,
-        ),
     }
     for name, (length, digest) in expected_inputs.items():
         data = inputs[name]
@@ -1308,8 +1294,10 @@ def main() -> int:
     print("Installing R31 resident and menu selectors...")
     img = rewrite_dos_binary(img, "PRCOMS", prcoms)
     img = rewrite_dos_binary(img, "MENUS7", menus7)
-    img = rewrite_dos_binary(img, "MENUS3", menus3)
     img = rewrite_dos_binary(img, "MENUS4", menus4)
+
+    print("Installing R31 stationery wrapper without moving MENUS3 code...")
+    img, menus3 = patch_menus3_stationery_wrapper(img)
 
     print("Installing R31 cards/signs dispatch without growing MENUS1...")
     img, draw1 = patch_draw1_dispatch(img)
@@ -1317,10 +1305,6 @@ def main() -> int:
     print("Adding type-10 OkiGraph alternate overlays...")
     img = add_dos_binary(
         img, "DRAW6", gcdraw, load=0x7800, template_name="DRAW1"
-    )
-    draw7 = build_stationery_draw7_payload(img, lhdraw)
-    img = add_dos_binary(
-        img, "DRAW7", draw7, load=0x7800, template_name="DRAW3"
     )
     draw8 = build_banner_draw8_payload(img)
     img = add_dos_binary(
@@ -1352,7 +1336,6 @@ def main() -> int:
             "MENUS4": menus4,
             "DRAW1": draw1,
             "DRAW6": gcdraw,
-            "DRAW7": draw7,
             "DRAW8": draw8,
             "SYSLIB": syslib,
         },
