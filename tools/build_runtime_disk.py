@@ -664,7 +664,10 @@ R30_DRAW4_SHA256 = (
     "4360a87c4663b50aad99c6a5f7fca75"
     "f997d3b23ff8e73bd3f783619f9d03235"
 )
-R30_IMAGE_SHA256 = None  # R31 staging: repin after all type-10 splits
+R31_IMAGE_SHA256 = (
+    "6434fcf6c1fe4a802c894f8b4424e954"
+    "43b02b0f060c7a61b0d05f38e3e1c834"
+)
 
 R30_STRSUB_OLD = bytes.fromhex(
     "46 5D B0 01 60 A6 5F CA 8A 0A 85 5E"
@@ -1577,12 +1580,12 @@ def main() -> int:
 
     digest = sha256(img)
     if (
-        R30_IMAGE_SHA256 is not None
-        and digest != R30_IMAGE_SHA256
+        R31_IMAGE_SHA256 is not None
+        and digest != R31_IMAGE_SHA256
     ):
         raise RuntimeError(
             "runtime image hash mismatch; expected "
-            f"{R30_IMAGE_SHA256}, got {digest}"
+            f"{R31_IMAGE_SHA256}, got {digest}"
         )
     print(f"Runtime image: {args.output}")
     print(f"Image bytes: {len(img)}")
