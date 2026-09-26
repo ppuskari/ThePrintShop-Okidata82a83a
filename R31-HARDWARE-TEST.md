@@ -1,11 +1,11 @@
-# R31 Hardware-Test Candidate
+# R31 Final Hardware Validation
 
 R31 separates the two Okidata families that shared printer type 5 during
-development.
+development and is the basis of the v1.0.0 final release.
 
-This candidate is reproducible and CI-green, but it is **not hardware-golden
-until the physical OkiGraph regression pass is complete**. R30 remains the
-published hardware-golden prerelease.
+The complete type-10 OkiGraph regression passed on physical 82A/83A hardware,
+and the restored type-5 `OKIDATA MICROLINE 92,93` path was subsequently
+validated on a real MICROLINE 92. R31 is therefore hardware-golden.
 
 ## Printer selections
 
@@ -141,16 +141,16 @@ The builder aborts if the duplicate-track proof, deleted MAINMENU proof,
 catalog chain, VTOC state, or resulting allocation differs from the known
 production image.
 
-## Complete candidate image
+## Complete final image
 
 ```text
 size    143360 bytes
 SHA256  6434fcf6c1fe4a802c894f8b4424e95443b02b0f060c7a61b0d05f38e3e1c834
 ```
 
-The pinned-head GitHub workflow runs 23 regression tests, validates every
-compiled overlay hash, builds this exact image, verifies the deterministic
-filesystem allocation, and uploads the R31 disk artifact.
+The pinned GitHub workflow runs 23 regression tests, validates every compiled
+overlay hash, builds this exact image, verifies the deterministic filesystem
+allocation, and packages the final release artifacts.
 
 ## Rebuild locally
 
@@ -184,12 +184,10 @@ SHA256 6434fcf6c1fe4a802c894f8b4424e95443b02b0f060c7a61b0d05f38e3e1c834
 8. Re-enter setup and confirm **OKIDATA MICROLINE 92,93** is independently
    selectable and persists as printer type 5.
 
-A real 92/93 hardware print remains a separate validation item if suitable
-hardware is available; R31 restores its historical software path, but this
-project should not claim new physical 92/93 validation without that test.
+The complete sequence passed on the OkiGraph 82A/83A path. The restored stock
+type-5 path was also checked on a real MICROLINE 92 and printed correctly.
 
-## Promotion rule
+## Promotion result
 
-If the type-10 physical regression pass matches the R21/R26/R27/R30 golden
-output, R31 can replace R30 as the current prerelease. Until then R30 remains
-the hardware-golden public baseline.
+PASS. R31 replaces R30 as the final hardware-golden baseline and is released
+as v1.0.0.
