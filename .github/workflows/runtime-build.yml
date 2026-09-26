@@ -92,8 +92,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.0 --repo "$env:GITHUB_REPOSITORY" *> $null
-          if ($LASTEXITCODE -eq 0) {
+          $Existing = gh release list `
+            --repo "$env:GITHUB_REPOSITORY" `
+            --json tagName `
+            --jq '.[] | select(.tagName=="v1.0.0") | .tagName'
+
+          if ($Existing -eq "v1.0.0") {
             Write-Host "v1.0.0 release already exists; leaving it unchanged."
             exit 0
           }
