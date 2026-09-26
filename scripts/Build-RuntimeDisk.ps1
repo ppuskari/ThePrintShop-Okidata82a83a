@@ -66,7 +66,7 @@ Write-Host ""
 
 Push-Location $RepoRoot
 try {
-    Write-Host "Running R29 regression tests..."
+    Write-Host "Running R31 regression tests..."
     Invoke-Checked {
         py -3 -m unittest discover -s tests -v
     } "Regression tests"
@@ -87,7 +87,13 @@ try {
             "MENUS7.ORIG.BUILD.S",
             "MENUS7.OKI.BUILD.S",
             "GCDRAW.ORIG.BUILD.S",
-            "GCDRAW.OKI.BUILD.S"
+            "GCDRAW.OKI.BUILD.S",
+            "MENUS3.ORIG.BUILD.S",
+            "MENUS3.OKI.BUILD.S",
+            "MENUS4.ORIG.BUILD.S",
+            "MENUS4.OKI.BUILD.S",
+            "LHDRAW.ORIG.BUILD.S",
+            "LHDRAW.OKI.BUILD.S"
         )) {
             Write-Host "  $Source"
             & $MerlinExe $Source
@@ -109,6 +115,7 @@ try {
     $Runtime = Join-Path $OutPath "PrintShop-Okidata82a83a-OkiGraphI.dsk"
     $Prcoms = Join-Path $OutPath "PRCOMS.OKI"
     $Menus7 = Join-Path $OutPath "MENUS7.OKI"
+    $Menus4 = Join-Path $OutPath "MENUS4.OKI"
     $Gcdraw = Join-Path $OutPath "GCDRAW.OKI"
 
     Write-Host ""
@@ -117,6 +124,7 @@ try {
         "tools\build_runtime_disk.py",
         "--prcoms", $Prcoms,
         "--menus7", $Menus7,
+        "--menus4", $Menus4,
         "--gcdraw", $Gcdraw,
         "--output", $Runtime
     )

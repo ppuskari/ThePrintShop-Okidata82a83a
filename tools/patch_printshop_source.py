@@ -37,7 +37,7 @@ from inspect_printshop_source import (
 )
 
 OLD_MENU = "OKIDATA MICROLINE 92,93"
-NEW_MENU = "OKI 82A/83A OKIGRAPH I "
+NEW_MENU = "OKI 82A/83A OKIGRAPH I"
 
 # Keep the replacement machine-code length equal to the original.
 #
@@ -70,7 +70,10 @@ GC5_NEW = """GC5A PLA
  CMP #03
  BNE GC5B
  JSR COUTRAW
-GC5B PHA"""
+GC5B PHA
+ BIT FIX80
+ BMI GC5X"""
+
 
 
 CRLF_OLD = re.compile(
@@ -91,10 +94,14 @@ CRLF_OLD = re.compile(
     r"^SETLFX RTS$"
 )
 
-CRLF_NEW = """CRLF LDA PRTYPE
- CMP #05
- BEQ CRLF5
- LDA #$0D
+CRLF_NEW = """CRLF BIT FIX80
+ BPL CRLF0
+ CPX #00
+ BEQ CRLF10G
+ CPX #02
+ BNE CRLF0
+ LDY #00
+CRLF0 LDA #$0D
  JSR COUT1
  JSR SETLF
  DEY
@@ -103,47 +110,24 @@ CRLF2 LDA #$0A
  JSR COUT1
  DEY
  BPL CRLF2
- BMI CRLFX
-*
-* OKIGRAPH I TYPE-5 CR/LF - R8 PRCOMS CORE
-* Continuous graphics from R7; DUMP boundary handling is in GCDRAW.
-*
-CRLF5 LDA FIX80
- BEQ CRLF5T
- CPX #40
- BNE CRLF5N
- LDY #68
- BNE CRLF5G
-CRLF5N CPX #00
- BNE CRLF5E
- CPY #00
- BEQ CRLF5E
-CRLF5G LDA #03
- JSR COUTRAW
- LDA #$0E
- JSR COUTRAW
- DEY
- BNE CRLF5G
- JMP CRLFX
-CRLF5E LDA #$0D
- JSR COUT1
- JMP CRLF5D
-CRLF5T LDA #$0D
- JSR COUTRAW
-CRLF5D DEY
- BMI CRLFX
- CPX #02
- BEQ CRLFX
-CRLF5L LDA #$0A
- JSR COUTRAW
- DEY
- BPL CRLF5L
 CRLFX TXA
  PHA
  JSR UPLRK
  PLA
  TAX
-SETLFX RTS"""
+SETLFX RTS
+*
+* R31 TYPE-10 OKIGRAPH NATIVE GRAPHICS FEED.
+* FIX80=$FF MEANS TYPE-10 GRAPHICS IS ACTIVE.
+*
+CRLF10G LDA #03
+ JSR COUTRAW
+ LDA #$0E
+ JSR COUTRAW
+ DEY
+ BNE CRLF10G
+ BEQ CRLFX"""
+
 
 
 SGC5_OLD = re.compile(
@@ -159,12 +143,20 @@ SGC5_NEW = """SGC5 STX TEMPLO
  STY TEMPHI
  LDA #00
  STA GCINDEX
- LDA FIX80
- BNE SGC5X
- INC FIX80
+ LDA #03
+ JMP COUT1
+*
+* R31 TYPE-10 OKIGRAPH ENTRY. TYPE 5 ABOVE IS HISTORICAL 92/93.
+*
+SGC10 LDA #00
+ STA GCINDEX
+ BIT FIX80
+ BMI SGC10X
+ DEC FIX80
  LDA #03
  JMP COUTRAW
-SGC5X RTS"""
+SGC10X RTS"""
+
 
 GC5_END_OLD = re.compile(
     r"(?m)^[ \t]+LDA #03\n"
@@ -184,16 +176,13 @@ COUT1_OLD = re.compile(
 )
 
 COUT1_NEW = """COUT1 PHA
- LDA PRTYPE
- CMP #05
- BNE COUT1N
- LDA FIX80
- BEQ COUT1N
+ BIT FIX80
+ BPL COUT1N
  LDA #03
  JSR COUTRAW
  LDA #02
  JSR COUTRAW
- DEC FIX80
+ INC FIX80
 COUT1N PLA
 COUTRAW STX XTEMP
  STY YTEMP
@@ -201,14 +190,34 @@ COUTRAW STX XTEMP
 COUT1A LDX PITYPE
 """
 
-SETLF5_OLD = """SETLF5 LDA #'%'
- JSR COUT1
- LDA #'9'
- JSR COUT1
- TXA
- ASL
- JMP COUT1"""
-SETLF5_NEW = """SETLF5 RTS"""
+
+SETLF_PREAMBLE_OLD = """SETLF CPX #00
+ BEQ SETLFX
+ JSR ESCOUT
+ LDA PRTYPE
+ CMP #07"""
+
+SETLF_PREAMBLE_NEW = """SETLF CPX #00
+ BEQ SETLFX
+ LDA PRTYPE
+ CMP #10
+ BEQ SETLFX
+ PHA
+ JSR ESCOUT
+ PLA
+ CMP #07"""
+
+SENDGC_TAIL_OLD = """ CMP #09
+ BEQ SGC1
+*
+SGC7 JSR DIVSUB"""
+
+SENDGC_TAIL_NEW = """ CMP #09
+ BEQ SGC1
+ BCS SGC10
+*
+SGC7 JSR DIVSUB"""
+
 
 MENUS_INIT_OLD = """ JSR GSELECT
  STA PRTYPE
@@ -281,7 +290,7 @@ DUMP0B STA ROWCNT
  CMP #02
  BEQ DUMP0S
  LDY $95F1
- CPY #05
+ CPY #10
  BNE DUMP1
  DEC ROWCNT
  DEC ROWCNT
@@ -359,7 +368,7 @@ GCNUMH HEX 040204"""
 
 GCDRAW_HELPER_NEW = """ BCS SR02
 *
-* R9A TYPE-5 CARD SOURCE-ROW RESAMPLER.
+* R9A TYPE-10 OKIGRAPH CARD SOURCE-ROW RESAMPLER.
 * X=0/2 SELECTS + / - SOURCE DIRECTION.
 *
 R9MOVE LDA SIDE
@@ -418,7 +427,7 @@ def patch_gcdraw(text: str) -> str:
         patched,
         GCDRAW_ROWCOUNT_OLD,
         GCDRAW_ROWCOUNT_NEW,
-        "GCDRAW.S type-5 card row count",
+        "GCDRAW.S type-10 card row count",
     )
     patched = replace_once(
         patched,
@@ -430,13 +439,13 @@ def patch_gcdraw(text: str) -> str:
         patched,
         GCDRAW_SIGNSTEP_OLD,
         GCDRAW_SIGNSTEP_NEW,
-        "GCDRAW.S type-5 sign duplicate-row trim",
+        "GCDRAW.S type-10 sign duplicate-row trim",
     )
     patched = replace_once(
         patched,
         GCDRAW_MOVE_OLD,
         GCDRAW_MOVE_NEW,
-        "GCDRAW.S type-5 card/source stepping",
+        "GCDRAW.S type-10 card/source stepping",
     )
     patched = replace_once(
         patched,
@@ -448,8 +457,79 @@ def patch_gcdraw(text: str) -> str:
         patched,
         GCDRAW_HELPER_OLD,
         GCDRAW_HELPER_NEW,
-        "GCDRAW.S type-5 card row resampler",
+        "GCDRAW.S type-10 card row resampler",
     )
+
+R31_LHMENU_LOAD_OLD = """PRINT1 JSR PSDID
+ LDX #DRAW3
+ LDY #>DRAW3
+ JSR BLOAD
+ BNE PRINT1"""
+
+R31_LHMENU_LOAD_NEW = """PRINT1 JSR PSDID
+ LDX #DRAW3
+ LDY #>DRAW3
+ JSR BLOAD
+ BNE PRINT1
+ LDA $95F1
+ CMP #10
+ BNE R31D3
+ LDA #00
+ STA $7EE5
+ LDA #$44
+ STA $7EE7
+R31D3"""
+
+
+
+R31_BMENU_LOAD_OLD = """ JSR PSDID
+ LDX #DRAW4
+ LDY #>DRAW4
+ JSR BLOAD"""
+
+R31_BMENU_LOAD_NEW = """ JSR PSDID
+ LDA $95F1
+ CMP #10
+ BNE R31D4
+ LDA #$38
+ STA DRAW4+4
+R31D4 LDX #DRAW4
+ LDY #>DRAW4
+ JSR BLOAD"""
+
+R31_LHDRAW_PAGE_OLD = """MOV575 LDX #40
+ LDY #14
+ JSR MOVCRLF"""
+
+R31_LHDRAW_PAGE_NEW = """MOV575 LDX #00
+ LDY #68
+ JSR MOVCRLF"""
+
+
+def patch_lhmenus(text: str) -> str:
+    """R31 keeps MENUS3 source historical; runtime adds an EOF wrapper."""
+    return text
+
+
+def patch_bmenus(text: str) -> str:
+    """Route banners to DRAW8 only for OkiGraph type 10."""
+    return replace_once(
+        text,
+        R31_BMENU_LOAD_OLD,
+        R31_BMENU_LOAD_NEW,
+        "BMENUS.S type-10 DRAW8 selector",
+    )
+
+
+def patch_lhdraw(text: str) -> str:
+    """Move the golden R27 page gap into the OkiGraph-only DRAW7 overlay."""
+    return replace_once(
+        text,
+        R31_LHDRAW_PAGE_OLD,
+        R31_LHDRAW_PAGE_NEW,
+        "LHDRAW.S R27 68-native-feed stationery gap",
+    )
+
 
 BDRAW_TEXT_OLD = """BSTR6 LDX #00
  LDY #01
@@ -648,67 +728,97 @@ def replace_once(text: str, old: str, new: str, what: str) -> str:
 
 
 def patch_prcoms(text: str) -> str:
-    gc_matches = list(GC5_OLD.finditer(text))
-    if len(gc_matches) != 1:
-        raise RuntimeError(
-            "PRCOMS.S GC5 block: expected exactly one legacy type-5 block, "
-            f"found {len(gc_matches)}"
-        )
+    """R31 split: restore historical type 5 and add OkiGraph as type 10."""
+    checks = (
+        (GC5_OLD, "PRCOMS.S GC5 block"),
+        (CRLF_OLD, "PRCOMS.S CRLF block"),
+        (SGC5_OLD, "PRCOMS.S SGC5 block"),
+        (COUT1_OLD, "PRCOMS.S COUT1 block"),
+    )
+    for pattern, what in checks:
+        matches = list(pattern.finditer(text))
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"{what}: expected exactly one original block, "
+                f"found {len(matches)}"
+            )
 
-    crlf_matches = list(CRLF_OLD.finditer(text))
-    if len(crlf_matches) != 1:
-        raise RuntimeError(
-            "PRCOMS.S CRLF block: expected exactly one original block, "
-            f"found {len(crlf_matches)}"
-        )
+    for old, what in (
+        (SETLF_PREAMBLE_OLD, "PRCOMS.S SETLF preamble"),
+        (SENDGC_TAIL_OLD, "PRCOMS.S SENDGC type-10 dispatch site"),
+    ):
+        count = text.count(old)
+        if count != 1:
+            raise RuntimeError(
+                f"{what}: expected exactly one original block, found {count}"
+            )
 
-    sgc5_matches = list(SGC5_OLD.finditer(text))
-    if len(sgc5_matches) != 1:
+    gcout_old = """GCOUT1 PHA
+ LDA PRTYPE"""
+    gcout_new = """GCOUT1 PHA
+ BIT FIX80
+ BPL GCOUT10
+ JMP GC5
+GCOUT10 LDA PRTYPE"""
+    if text.count(gcout_old) != 1:
         raise RuntimeError(
-            "PRCOMS.S SGC5 block: expected exactly one original block, "
-            f"found {len(sgc5_matches)}"
-        )
-
-    gc5_end_matches = list(GC5_END_OLD.finditer(text))
-    if len(gc5_end_matches) != 1:
-        raise RuntimeError(
-            "PRCOMS.S GC5 end block: expected exactly one original block, "
-            f"found {len(gc5_end_matches)}"
-        )
-
-    cout1_matches = list(COUT1_OLD.finditer(text))
-    if len(cout1_matches) != 1:
-        raise RuntimeError(
-            "PRCOMS.S COUT1 block: expected exactly one original block, "
-            f"found {len(cout1_matches)}"
-        )
-
-    setlf5_count = text.count(SETLF5_OLD)
-    if setlf5_count != 1:
-        raise RuntimeError(
-            "PRCOMS.S SETLF5 block: expected exactly one original block, "
-            f"found {setlf5_count}"
+            "PRCOMS.S GCOUT1 entry: expected exactly one original block"
         )
 
     patched = CRLF_OLD.sub(CRLF_NEW, text, count=1)
     patched = SGC5_OLD.sub(SGC5_NEW, patched, count=1)
     patched = GC5_OLD.sub(GC5_NEW, patched, count=1)
-    patched = GC5_END_OLD.sub(GC5_END_NEW, patched, count=1)
     patched = COUT1_OLD.sub(COUT1_NEW, patched, count=1)
-    patched = patched.replace(SETLF5_OLD, SETLF5_NEW, 1)
+    patched = patched.replace(
+        SETLF_PREAMBLE_OLD,
+        SETLF_PREAMBLE_NEW,
+        1,
+    )
+    patched = patched.replace(
+        SENDGC_TAIL_OLD,
+        SENDGC_TAIL_NEW,
+        1,
+    )
+    patched = patched.replace(gcout_old, gcout_new, 1)
+
+    # R31 intentionally leaves the historical SETLF5 and GC5 close sequence
+    # untouched for stock Okidata Microline 92/93 (printer type 5).
+    if "SETLF5 LDA #'%'" not in patched:
+        raise RuntimeError("R31 lost historical SETLF5")
+    if GC5_END_OLD.search(patched) is None:
+        raise RuntimeError("R31 lost historical type-5 graphics close")
 
     return patched
 
 
 def patch_menus(text: str) -> str:
-    if len(OLD_MENU) != len(NEW_MENU):
-        raise AssertionError("menu replacement must remain length-preserving")
-    patched = replace_once(text, OLD_MENU, NEW_MENU, "MENUS7.S printer label")
+    """R31: retain stock 92/93 as item 5 and append OkiGraph as type 10."""
+    if text.count("PRMAX EQU 9") != 1:
+        raise RuntimeError("MENUS7.S: expected PRMAX EQU 9")
+    if text.count(OLD_MENU) != 1:
+        raise RuntimeError("MENUS7.S: stock Okidata 92/93 label missing")
+    if NEW_MENU in text:
+        raise RuntimeError("MENUS7.S: OkiGraph type-10 label already present")
+
+    tail_old = """ ASC 'CENTRONICS GLP, AXIOM SLP, OKI 292'
+ HEX 00FF"""
+    tail_new = f""" ASC 'CENTRONICS GLP, AXIOM SLP, OKI 292'
+ HEX 00
+ ASC '{NEW_MENU}'
+ HEX 00FF"""
+
+    patched = text.replace("PRMAX EQU 9", "PRMAX EQU 10", 1)
+    patched = replace_once(
+        patched,
+        tail_old,
+        tail_new,
+        "MENUS7.S printer-list tail",
+    )
     return replace_once(
         patched,
         MENUS_INIT_OLD,
         MENUS_INIT_NEW,
-        "MENUS7.S type-5 state initialization",
+        "MENUS7.S graphics-state initialization",
     )
 
 
@@ -824,12 +934,14 @@ def write_patched_disks(
     ):
         raise RuntimeError("generated source disk 1 does not contain the OkiGraph GC5 patch")
     if (
-        NEW_MENU not in rt2
-        or OLD_MENU in rt2
+        rt2.count(NEW_MENU) != 1
+        or rt2.count(OLD_MENU) != 1
+        or "PRMAX EQU 10" not in rt2
         or " STA $B9\n" not in rt2
     ):
         raise RuntimeError(
-            "generated source disk 2 does not contain the OkiGraph menu/init patch"
+            "generated source disk 2 does not contain the R31 "
+            "stock-92/93 plus type-10 OkiGraph menu"
         )
 
     print("  generated DOS 3.3 source disks:")
@@ -871,21 +983,26 @@ def main() -> int:
     patched_gcdraw = patch_gcdraw(gcdraw)
     patched_bdraw = patch_bdraw(bdraw)
 
-    # These are the two invariants that keep the first hardware build
-    # deliberately low-risk.
-    assert len(OLD_MENU) == len(NEW_MENU) == 23
+    if patched_menus7.count(OLD_MENU) != 1:
+        raise RuntimeError("R31 must retain exactly one stock 92/93 menu item")
+    if patched_menus7.count(NEW_MENU) != 1:
+        raise RuntimeError("R31 must add exactly one OkiGraph type-10 item")
+    if "PRMAX EQU 10" not in patched_menus7:
+        raise RuntimeError("R31 printer selector did not expand to 10 items")
 
-    print("Print Shop v2 OkiGraph I source patch: PASS")
-    print("  printer type: 5 (repurposed legacy Okidata 92/93 path)")
-    print("  menu label: 23 -> 23 characters")
+    print("Print Shop v2 OkiGraph I R31 source split: PASS")
+    print("  printer type 5 : stock OKIDATA MICROLINE 92,93 restored")
+    print("  printer type 10: OKI 82A/83A OKIGRAPH I")
     print("  R27 base: golden R21 cards + golden R26 signs unchanged")
-    print("  R27 stationery: type-5 X=40/Y=14 becomes 68 native graphics feeds")
+    print("  R31 core: type 5 retains historical PRCOMS semantics")
+    print("  R31 core: type 10 uses compact OkiGraph graphics state")
+    print("  R27 stationery geometry remains to be moved from type 5 to type 10")
     print("  R27 native move: 68 x 15/144 inch = 179.917 mm")
     print("  R27 preserves following X=8 and X=7 text-feed calls")
     print("  R29 banner text: native feed cadence 1,1,2 = exact 20/144 average")
     print("  R29 banner icon: 15 source slices -> 13 native positions")
     print("  R29 banner changes are confined to assembled BDRAW/DRAW4")
-    print("  graphics data: R11 original Oki type-5 $03 escape semantics")
+    print("  graphics data: R11 OkiGraph $03 escape semantics target type 10")
     print("  framing: existing $03 ... $03 $02 retained")
     print(f"  PRCOMS source high-bit ratio: {prcoms_info['high_ratio']:.3f}")
     print(f"  MENUS7 source high-bit ratio: {menus7_info['high_ratio']:.3f}")

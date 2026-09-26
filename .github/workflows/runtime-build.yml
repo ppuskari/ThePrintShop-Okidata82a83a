@@ -10,11 +10,12 @@ on:
       - "tools/prepare_merlin32_build.py"
       - "tools/validate_overlay_build.py"
       - "tools/build_runtime_disk.py"
+      - "tools/analyze_r31_printer_types.py"
       - "scripts/Build-RuntimeDisk.ps1"
       - ".github/workflows/runtime-build.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   windows-runtime-build:
@@ -24,6 +25,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Analyze printer type split
+        shell: powershell
+        run: py -3 tools\analyze_r31_printer_types.py
       - name: Build runnable disk
         shell: powershell
         run: .\scripts\Build-RuntimeDisk.ps1
@@ -37,9 +41,69 @@ jobs:
             throw "Unexpected runtime disk size $($Info.Length)"
           }
           Get-FileHash -Algorithm SHA256 $Disk
-      - name: Upload deployable R30 disk
+      - name: Package v1.0.0 release artifacts
+        shell: powershell
+        run: |
+          $ReleaseDir = "release-v1.0.0"
+          New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
+
+          $Files = @(
+            "build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk",
+            "build-runtime\PRCOMS.OKI",
+            "build-runtime\MENUS7.OKI",
+            "build-runtime\GCDRAW.OKI",
+            "build-runtime\MENUS3.OKI",
+            "build-runtime\MENUS4.OKI",
+            "build-runtime\LHDRAW.OKI",
+            "README.md",
+            "R31-HARDWARE-TEST.md",
+            "RELEASE-v1.0.0.md"
+          )
+
+          foreach ($File in $Files) {
+            if (-not (Test-Path $File)) { throw "Missing release file: $File" }
+            Copy-Item $File -Destination $ReleaseDir
+          }
+
+          $HashFiles = Get-ChildItem $ReleaseDir -File | Sort-Object Name
+          $Lines = foreach ($File in $HashFiles) {
+            $Hash = (Get-FileHash -Algorithm SHA256 $File.FullName).Hash.ToLowerInvariant()
+            "$Hash  $($File.Name)"
+          }
+          $Lines | Set-Content -Encoding ascii "$ReleaseDir\SHA256SUMS.txt"
+
+          $Zip = "PrintShop-Color-Okidata-v1.0.0-artifacts.zip"
+          if (Test-Path $Zip) { Remove-Item $Zip -Force }
+          Compress-Archive -Path "$ReleaseDir\*" -DestinationPath $Zip
+
+      - name: Upload v1.0.0 release package
         uses: actions/upload-artifact@v4
         with:
-          name: PrintShop-Okidata82a83a-OkiGraphI-R30
-          path: build-runtime\PrintShop-Okidata82a83a-OkiGraphI.dsk
+          name: PrintShop-Color-Okidata-v1.0.0
+          path: |
+            release-v1.0.0\PrintShop-Okidata82a83a-OkiGraphI.dsk
+            release-v1.0.0\SHA256SUMS.txt
+            PrintShop-Color-Okidata-v1.0.0-artifacts.zip
           if-no-files-found: error
+
+      - name: Publish v1.0.0 GitHub release
+        if: github.ref == 'refs/heads/main'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v1.0.0 --repo "$env:GITHUB_REPOSITORY" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "v1.0.0 release already exists; leaving it unchanged."
+            exit 0
+          }
+
+          gh release create v1.0.0 `
+            "release-v1.0.0\PrintShop-Okidata82a83a-OkiGraphI.dsk#Final runnable DOS 3.3 disk" `
+            "PrintShop-Color-Okidata-v1.0.0-artifacts.zip#Compiled overlays and release documentation" `
+            "release-v1.0.0\SHA256SUMS.txt#SHA256 checksums" `
+            --repo "$env:GITHUB_REPOSITORY" `
+            --target "$env:GITHUB_SHA" `
+            --title "The Print Shop Color - Okidata v1.0.0" `
+            --notes-file "RELEASE-v1.0.0.md" `
+            --latest

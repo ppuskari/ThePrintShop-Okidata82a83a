@@ -5,10 +5,16 @@ the **Okidata MICROLINE 82A and 83A with OkiGraph I firmware**.
 
 ## Current status
 
-**Current prerelease: R30 hardware-golden on physical OkiGraph I hardware. R21 greeting cards, R26 signs, R27 stationery, and R30 banners are validated.**
+**Current release: v1.0.0 / R31 hardware-golden.** The final runtime has been physically validated on the Okidata MICROLINE 82A/83A with OkiGraph I and on a real MICROLINE 92 using the restored stock 92/93 path.
 
+The final release keeps `OKIDATA MICROLINE 92,93` as printer type 5 and adds
+`OKI 82A/83A OKIGRAPH I` as printer type 10. Greeting cards, signs,
+stationery, banners, paper positioning, menu selection, and the restored
+92/93 path are hardware-validated.
 
-Reproducible prerelease details, frozen hashes, and rebuild instructions are in [PRERELEASE.md](PRERELEASE.md).
+Final release hashes and packaging notes are in [RELEASE-v1.0.0.md](RELEASE-v1.0.0.md).
+The earlier R30 prerelease record remains in [PRERELEASE.md](PRERELEASE.md),
+and the R31 integration record remains in [R31-HARDWARE-TEST.md](R31-HARDWARE-TEST.md).
 
 The original Print Shop v2 source already contains a dedicated
 `OKIDATA MICROLINE 92,93` printer type. That path is an unusually good
@@ -21,8 +27,10 @@ starting point for the 82A/83A OkiGraph I driver because it already:
 - leaves graphics with `$03 $02`; and
 - uses Okidata `ESC % 9 n` programmable line spacing.
 
-The v0.1 driver deliberately repurposes that printer type instead of adding
-a tenth selector immediately.
+The early v0.1 through R30 driver deliberately repurposed that printer type
+while the OkiGraph geometry was being proven on hardware. R31 completes the
+planned split: the historical 92/93 entry is restored as type 5 and the
+OkiGraph 82A/83A driver becomes type 10.
 
 The hardware-good R11 graphics-byte conversion is:
 
@@ -1069,10 +1077,8 @@ https://github.com/ppuskari/Okidata-Microline-82A-83A
 
 ## Next milestone
 
-Validate the R7 disk on the physical 82A/83A. The specific targets are removal
-of the stray control/text output at graphics transitions, elimination of the
-extra vertical gap between seven-dot bands, and restoration of one-page layout.
-
-If R3 validates the corrected carriage-return and native graphics-feed path,
-the next source build can preserve the original 92/93 driver as type 5 and add
-**82A/83A OkiGraph I as a distinct printer type 10**.
+The Print Shop Color Okidata v1.0.0 driver is complete and hardware-validated.
+Future printer work should be treated as a separate project or second-disk
+overlay architecture rather than extending this essentially full runtime disk.
+The next active project is the Linux CUPS/Ghostscript driver for the
+MICROLINE 82A/83A with OkiGraph I.

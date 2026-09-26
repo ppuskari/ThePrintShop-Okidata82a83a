@@ -4,16 +4,23 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import pathlib
 
 EXPECTED = {
     "PRCOMS.ORIG": (1962, "6fb3928799f085967822362a3e7ba0b88dadd21e7e33372951e5734578c4629a"),
-    "PRCOMS.OKI":  (2043, "f0763857572ee113b2806fd0262d2f38b83d9f58571fa721a83867aad00d46a5"),
+    "PRCOMS.OKI":  (2044, "e5d235ac23ecfc5b593bd9b46c74bf1669265a1db0b73f9e280df811b31dfa95"),
     "MENUS7.ORIG": (3014, "86d7fa76bfd693d461aa9085e3612253837e7f5f02a6027581beef3284c5355f"),
-    "MENUS7.OKI":  (3018, "1562e1ad72c5660ade0ccda7ef9cfa439805ee35e96fc3a5a923096c7d37d485"),
+    "MENUS7.OKI":  (3041, "f6177227faff75262e4cac378488e5ec244a956663ed3173d01fb4e72c13fd85"),
     "GCDRAW.ORIG": (2737, "cfa548eb4f950156c14639372f2681edbaa810e86f0945d73c24e0304e436353"),
-    "GCDRAW.OKI":  (2810, "4bd76c9d9fbe1a32870b00edc3ca54061037dc6cd4491eb8202b5e7f26c9db4a"),
+    "GCDRAW.OKI":  (2810, "be8bbee04098717019870a60b5f16f002427412e7399cadbcc179d7c0f7d34a7"),
+    "MENUS3.ORIG": (2584, "ba570d635de4ebed8f32599146c56ebf975f27ed89e967d220175963d8b7922d"),
+    "MENUS3.OKI":  (2584, "ba570d635de4ebed8f32599146c56ebf975f27ed89e967d220175963d8b7922d"),
+    "MENUS4.ORIG": (1513, "b80c97a43d1a89134575f76db5a0f3ce633f523136cffb12f2afa33c21692d58"),
+    "MENUS4.OKI":  (1525, "583764b31d2c27827fbd33abe075d77e3436d495df7f1d8c5955ed40640adc6e"),
+    "LHDRAW.ORIG": (1791, "16d6264b3a6f815f4138677967b235b37582713ec5bcc2c23f39cbeb3082282f"),
+    "LHDRAW.OKI":  (1791, "ee5dcf9ef4173dcc6afb8a118f95f451cca4c4861888c536b7323afeb15e8b59"),
 }
 
 
@@ -39,6 +46,65 @@ def main() -> int:
             )
         status = "DISCOVERY" if expected_hash is None else "PASS"
         print(f"{name}: {status} len={len(data)} sha256={actual_hash}")
+
+    gc_orig = (args.build_dir / "GCDRAW.ORIG").read_bytes()
+    gc_oki = (args.build_dir / "GCDRAW.OKI").read_bytes()
+    sm = difflib.SequenceMatcher(None, gc_orig, gc_oki, autojunk=False)
+    opcodes = sm.get_opcodes()
+    edits = [op for op in opcodes if op[0] != "equal"]
+    inserted_bytes = sum(j2 - j1 for tag, i1, i2, j1, j2 in edits)
+    deleted_bytes = sum(i2 - i1 for tag, i1, i2, j1, j2 in edits)
+    # Candidate compact edit stream:
+    # 2-byte original offset + 1-byte delete + 1-byte insert + inserted data.
+    # Long runs can be split if a count exceeds 255.
+    compact_size = 0
+    compact_ops = 0
+    for tag, i1, i2, j1, j2 in edits:
+        old_n = i2 - i1
+        new_n = j2 - j1
+        chunks = max(
+            1,
+            (old_n + 254) // 255,
+            (new_n + 254) // 255,
+        )
+        compact_ops += chunks
+        compact_size += chunks * 4 + new_n
+    print(
+        "GCDRAW R31 binary delta: "
+        f"orig={len(gc_orig)} oki={len(gc_oki)} "
+        f"edit_ops={len(edits)} compact_ops={compact_ops} "
+        f"inserted_or_replacement_bytes={inserted_bytes} "
+        f"deleted_or_replaced_bytes={deleted_bytes} "
+        f"candidate_edit_stream={compact_size} bytes"
+    )
+    for op in edits[:40]:
+        tag, i1, i2, j1, j2 = op
+        print(
+            f"  {tag:7s} old +0x{i1:04X}..+0x{i2:04X} "
+            f"new +0x{j1:04X}..+0x{j2:04X} "
+            f"old_n={i2-i1} new_n={j2-j1}"
+        )
+    if len(edits) > 40:
+        print(f"  ... {len(edits)-40} more edit op(s)")
+
+    lh_orig = (args.build_dir / "LHDRAW.ORIG").read_bytes()
+    lh_oki = (args.build_dir / "LHDRAW.OKI").read_bytes()
+    lh_diffs = [
+        (i, a, b)
+        for i, (a, b) in enumerate(zip(lh_orig, lh_oki))
+        if a != b
+    ]
+    print(
+        "LHDRAW R31 immediate diffs: "
+        + ", ".join(
+            f"+0x{i:04X} {a:02X}->{b:02X}"
+            for i, a, b in lh_diffs
+        )
+    )
+    if [(a, b) for _, a, b in lh_diffs] != [(40, 0), (14, 68)]:
+        raise RuntimeError(
+            f"LHDRAW R31 unexpected diff set: {lh_diffs}"
+        )
 
     print("PASS: original controls and OkiGraph overlays are reproducible")
     return 0
